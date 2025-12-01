@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kobot Pick 대시보드</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<div class="hero">
+    <div>
+        <p class="eyebrow" id="eyebrow-text">Kobot Pick</p>
+        <h1 id="hero-title">오늘의 AI 추천 포트폴리오</h1>
+        <p class="sub" id="hero-sub">해외/국내/ETF 추천을 한 번에 확인하세요.</p>
+    </div>
+    <div class="hero-actions">
+        <select id="lang-select" class="lang-select">
+            <option value="ko">한국어</option>
+            <option value="en">English</option>
+            <option value="ja">日本語</option>
+            <option value="zh">中文</option>
+        </select>
+        <div class="hero-badge" id="hero-live">Live</div>
+    </div>
+</div>
+
+<!-- 글로벌 뉴스 티커 -->
+<div class="headline-bar">
+    <div class="headline-label">Top News</div>
+    <div id="headline-track" class="headline-track"></div>
+</div>
+
+<div id="loading" class="loading">추천 종목을 분석 중입니다...</div>
+
+<section class="section">
+    <div id="market-snapshot" class="market-snapshot"></div>
+    <div class="section-title" id="section-us">🇺🇸 해외 추천 Top 5</div>
+    <div id="us-picks" class="card-container"></div>
+</section>
+
+<section class="section">
+    <div class="section-title" id="section-kr">🇰🇷 국내 추천 Top 5</div>
+    <div id="kr-picks" class="card-container"></div>
+</section>
+
+<section class="section">
+    <div class="section-title" id="section-etf">📊 ETF 추천 Top 5</div>
+    <div id="etf-picks" class="card-container"></div>
+</section>
+
+<p class="disclaimer" id="disclaimer">이 정보는 AI 알고리즘에 의한 참고용이며, 투자 결정 및 책임은 본인에게 있습니다.</p>
+
+<script src="js/main_dashboard.js"></script>
+</body>
+</html>
