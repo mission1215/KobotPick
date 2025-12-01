@@ -1,6 +1,15 @@
 // kobotPick/frontEnd/js/main_dashboard.js
 
-const API_BASE_URL = 'http://127.0.0.1:8000/api/v1/';
+const API_BASE_URL =
+  window.KOBOT_API_BASE_URL || "http://127.0.0.1:8000/api/v1/";
+
+// 2) 데이터 호출 (대시보드)
+fetch(`${API_BASE_URL}dashboard`)
+  .then(res => res.json())
+  .then(data => {
+    console.log(data);
+    // TODO: 화면에 표시하는 처리
+  });  
 const REFRESH_MS = 60000; // 1분마다 새로고침 (유사 실시간)
 const TEXT = {
     ko: {
