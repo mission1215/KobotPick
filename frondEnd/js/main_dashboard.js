@@ -1,9 +1,10 @@
 // kobotPick/frontEnd/js/main_dashboard.js
 
 // API Base URL: 배포/로컬 모두 대응 & 끝의 슬래시 제거
-const API_BASE_URL =
-  (window.KOBOT_API_BASE_URL?.replace(/\/+$/, "")) ||
-  "http://127.0.0.1:8000/api/v1";
+const API_BASE_URL = (
+  window.KOBOT_API_BASE_URL ||
+  "https://kobotpick.onrender.com/api/v1/"
+).replace(/\/+$/, ""); 
 
 const REFRESH_MS = 60000; // 1분마다 새로고침 (유사 실시간)
 
