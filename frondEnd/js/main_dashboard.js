@@ -194,31 +194,7 @@ async function fetchAndRenderPicks() {
     if (etfPicksContainer) showSkeleton(etfPicksContainer, 5);
 
     try {
-        // 메인 picks 호출
-        const response = await fetchWithTimeout(`${API_BASE_URL}/picks`, { timeout: 12000 });
-        if (!response.ok) throw new Error('Failed to fetch Kobot Picks');
-        const picks = await response.json();
-        lastPicks = picks || [];
-
-        // 상세 추천 데이터 병렬 호출
-        const enriched = await Promise.all(
-            picks.map(async (pick) => {
-                try {
-                    const recRes = await fetchWithTimeout(
-                        `${API_BASE_URL}/recommendation/${encodeURIComponent(pick.ticker)}`,
-                        { timeout: 12000 }
-                    );
-                    if (!recRes.ok) {
-                        throw new Error(`recommendation error: ${recRes.status}`);
-                    }
-                    const rec = await recRes.json();
-                    return { ...pick, rec };
-                } catch (err) {
-                    console.error(`Error fetching recommendation for ${pick.ticker}:`, err);
-                    return { ...pick, rec: null };
-                }
-            })
-        );
+        const enriched = await getPicksWithRecommendations();
 
         // 섹션 클리어
         usPicksContainer.innerHTML = '';
@@ -293,6 +269,47 @@ async function fetchAndRenderPicks() {
     } finally {
         loadingElement.style.display = 'none';
     }
+}
+
+// picks/full 우선 사용해 API 호출 수를 줄이고, 실패 시 기존 방식으로 폴백
+async function getPicksWithRecommendations() {
+    try {
+        const resFull = await fetchWithTimeout(`${API_BASE_URL}/picks/full`);
+        if (resFull.ok) {
+            const data = await resFull.json();
+            if (Array.isArray(data) && data.length && data[0].rec) {
+                lastPicks = data.map(({ ticker, name }) => ({ ticker, name }));
+                return data;
+            }
+        }
+    } catch (err) {
+        console.warn('picks/full fallback -> individual calls', err);
+    }
+
+    // 기존 방식 폴백: picks 후 개별 recommendation 병렬 호출
+    const response = await fetchWithTimeout(`${API_BASE_URL}/picks`);
+    if (!response.ok) throw new Error('Failed to fetch Kobot Picks');
+    const picks = await response.json();
+    lastPicks = picks || [];
+
+    const enriched = await Promise.all(
+        picks.map(async (pick) => {
+            try {
+                const recRes = await fetchWithTimeout(
+                    `${API_BASE_URL}/recommendation/${encodeURIComponent(pick.ticker)}`
+                );
+                if (!recRes.ok) {
+                    throw new Error(`recommendation error: ${recRes.status}`);
+                }
+                const rec = await recRes.json();
+                return { ...pick, rec };
+            } catch (err) {
+                console.error(`Error fetching recommendation for ${pick.ticker}:`, err);
+                return { ...pick, rec: null };
+            }
+        })
+    );
+    return enriched;
 }
 
 async function renderFavorites() {
