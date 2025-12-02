@@ -107,7 +107,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const doSearch = () => {
         const val = searchInput?.value?.trim();
         if (!val) return;
-        const upper = val.toUpperCase();
+        // 한국 6자리 숫자 종목코드면 .KS 자동 부착
+        const upper = /^[0-9]{6}$/.test(val) ? `${val}.KS` : val.toUpperCase();
         const found = lastPicks.find(
             (p) =>
                 p.ticker.toUpperCase() === upper ||

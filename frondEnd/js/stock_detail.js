@@ -80,6 +80,8 @@ async function fetchStockData() {
         urlParams.get("ticker") ||
         urlParams.get("symbol") ||
         "AAPL";
+    // 한국 6자리 숫자 종목코드면 .KS 자동 부착
+    const normalizedTicker = /^[0-9]{6}$/.test(ticker) ? `${ticker}.KS` : ticker;
 
     const loadingElement = document.getElementById("loading");
     const contentElement = document.getElementById("content");
@@ -91,7 +93,7 @@ async function fetchStockData() {
 
     try {
         const res = await fetch(
-            `${API_BASE_URL}/recommendation/${encodeURIComponent(ticker)}`
+            `${API_BASE_URL}/recommendation/${encodeURIComponent(normalizedTicker)}`
         );
 
         let data = null;
@@ -112,7 +114,7 @@ async function fetchStockData() {
     } catch (error) {
         console.error("Error fetching data:", error);
         if (loadingElement) {
-            loadingElement.innerHTML = `데이터 로딩 실패: ${error.message}. 티커: ${ticker}`;
+            loadingElement.innerHTML = `데이터 로딩 실패: ${error.message}. 티커: ${normalizedTicker}`;
         }
         if (skeleton) skeleton.style.display = "none";
         if (contentElement) contentElement.style.display = "none";
