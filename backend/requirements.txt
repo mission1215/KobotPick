@@ -5,4 +5,5 @@ pandas-ta
 pydantic
 pydantic-settings
 httpx
+requests
 # yfinance 완전 삭제!
