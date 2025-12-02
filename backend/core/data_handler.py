@@ -49,8 +49,11 @@ def get_stock_info(ticker: str) -> Dict[str, Any]:
         return {'name': ticker, 'current_price': None}
 
 
-def get_news_items(ticker: str, limit: int = 6) -> List[Dict[str, Any]]:
-    """yfinance 뉴스에 실패/부족하면 Google News RSS로 보완."""
+def get_news_items(ticker: str, limit: int = 6, lang: str = "en") -> List[Dict[str, Any]]:
+    """
+    yfinance 뉴스에 실패/부족하면 Google News RSS로 보완.
+    lang: en/ko/ja/zh 등 Google News hl 파라미터에 사용.
+    """
     items: List[Dict[str, Any]] = []
     try:
         news = yf.Ticker(ticker).news or []
@@ -72,7 +75,10 @@ def get_news_items(ticker: str, limit: int = 6) -> List[Dict[str, Any]]:
     if len(items) < limit:
         try:
             query = quote_plus(ticker)
-            url = f"https://news.google.com/rss/search?q={query}"
+            # Google News 지역/언어 파라미터: hl=언어, gl=국가
+            lang = lang or "en"
+            region = "KR" if lang.startswith("ko") else "US"
+            url = f"https://news.google.com/rss/search?q={query}&hl={lang}&gl={region}"
             resp = requests.get(url, timeout=5)
             if resp.ok:
                 root = ET.fromstring(resp.content)

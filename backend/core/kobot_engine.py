@@ -26,6 +26,7 @@ def analyze_and_recommend(ticker: str, allow_partial: bool = False, country_hint
             return None
 
         country, currency = detect_region_currency(ticker, info.get('currency') or (country_hint if country_hint else None))
+        news_lang = "ko" if country == "KR" else "en"
         price_val = float(fallback_price)
         result = {
             'ticker': ticker,
@@ -50,7 +51,7 @@ def analyze_and_recommend(ticker: str, allow_partial: bool = False, country_hint
                 'rationale': '데이터가 제한적입니다. 기본 정보만 제공합니다.'
             },
             'historical': [],
-            'news': get_news_items(ticker),
+            'news': get_news_items(ticker, lang=news_lang),
             'profile': {
                 'sector': info.get('sector'),
                 'industry': info.get('industry'),
@@ -109,6 +110,7 @@ def analyze_and_recommend(ticker: str, allow_partial: bool = False, country_hint
         })
 
     country, currency = detect_region_currency(ticker, info.get('currency'))
+    news_lang = "ko" if country == "KR" else "en"
 
     result = {
         'ticker': ticker,
@@ -133,7 +135,7 @@ def analyze_and_recommend(ticker: str, allow_partial: bool = False, country_hint
             'rationale': rationale
         },
         'historical': hist_serialized,
-        'news': get_news_items(ticker),
+        'news': get_news_items(ticker, lang=news_lang),
         'profile': {
             'sector': info.get('sector'),
             'industry': info.get('industry'),
