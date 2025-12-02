@@ -435,17 +435,14 @@ function showSkeleton(container, count) {
     container.innerHTML = skeleton.join('');
 }
 
-let lastSnapshot = null;
-
 async function fetchSnapshot() {
     const box = document.getElementById('market-snapshot');
     if (!box) return;
     box.innerHTML = '<div class="snapshot-skeleton"></div>';
     try {
-        const res = await fetchWithTimeout(`${API_BASE_URL}/market/snapshot`, { timeout: 20000 });
+        const res = await fetchWithTimeout(`${API_BASE_URL}/market/snapshot`, { timeout: 12000 });
         if (!res.ok) throw new Error(`snapshot error ${res.status}`);
         const data = await res.json();
-        lastSnapshot = data;
         const entries = [
             { key: 'SPX', label: 'S&P 500' },
             { key: 'NASDAQ', label: 'Nasdaq' },
@@ -475,38 +472,7 @@ async function fetchSnapshot() {
             .join('');
     } catch (err) {
         console.error('snapshot error', err);
-        if (lastSnapshot) {
-            // 직전 데이터라도 보여주어 UI 에러를 피한다.
-            const entries = [
-                { key: 'SPX', label: 'S&P 500' },
-                { key: 'NASDAQ', label: 'Nasdaq' },
-                { key: 'KOSPI', label: 'KOSPI' },
-                { key: 'USDKRW', label: 'USD/KRW' },
-            ];
-            box.innerHTML = entries
-                .map((e) => {
-                    const v = lastSnapshot[e.key];
-                    if (!v) return '';
-                    const cls = v.change >= 0 ? 'pos' : 'neg';
-                    const price =
-                        e.key === 'USDKRW'
-                            ? `${Math.round(v.price).toLocaleString('ko-KR')}원`
-                            : v.price.toFixed(2);
-                    const pct = v.change_pct.toFixed(2);
-                    return `
-                        <div class="snapshot-item">
-                            <div class="snap-label">${e.label}</div>
-                            <div class="snap-value ${cls}">${price}</div>
-                            <div class="snap-change ${cls}">
-                                ${v.change >= 0 ? '+' : ''}${pct}%
-                            </div>
-                        </div>
-                    `;
-                })
-                .join('');
-        } else {
-            box.innerHTML = '<div class="snapshot-error">시장 지표를 불러오지 못했습니다.</div>';
-        }
+        box.innerHTML = '<div class="snapshot-error">시장 지표를 불러오지 못했습니다.</div>';
     }
 }
 
@@ -515,7 +481,7 @@ async function fetchHeadlines() {
     if (!track) return;
     track.innerHTML = '';
     try {
-        const res = await fetchWithTimeout(`${API_BASE_URL}/market/headlines`, { timeout: 20000 });
+        const res = await fetchWithTimeout(`${API_BASE_URL}/market/headlines`, { timeout: 12000 });
         if (!res.ok) throw new Error(`headline error ${res.status}`);
         const data = await res.json();
         const items = (data || [])
