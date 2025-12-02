@@ -8,6 +8,7 @@ const API_BASE_URL = (
 
 const REFRESH_MS = 60000; // 1분마다 새로고침 (유사 실시간)
 const FAVORITES_KEY = 'kobot-favorites';
+let lastPicks = [];
 
 const TEXT = {
     ko: {
@@ -106,7 +107,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const doSearch = () => {
         const val = searchInput?.value?.trim();
         if (!val) return;
-        window.location.href = `detail.html?ticker=${encodeURIComponent(val)}`;
+        const upper = val.toUpperCase();
+        const found = lastPicks.find(
+            (p) =>
+                p.ticker.toUpperCase() === upper ||
+                p.name.toLowerCase().includes(val.toLowerCase())
+        );
+        const target = found ? found.ticker : upper;
+        window.location.href = `detail.html?ticker=${encodeURIComponent(target)}`;
     };
     if (searchBtn && searchInput) {
         searchBtn.addEventListener('click', doSearch);
@@ -147,6 +155,7 @@ async function fetchAndRenderPicks() {
         const response = await fetch(`${API_BASE_URL}/picks`);
         if (!response.ok) throw new Error('Failed to fetch Kobot Picks');
         const picks = await response.json();
+        lastPicks = picks || [];
 
         // 상세 추천 데이터 병렬 호출
         const enriched = await Promise.all(
