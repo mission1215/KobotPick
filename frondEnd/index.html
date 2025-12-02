@@ -12,19 +12,9 @@
         (adsbypropeller = window.adsbypropeller || []).push({});
     </script>
 
-    <!-- Google AdSense 자동 광고 -->
+    <!-- Google AdSense 자동 광고 (auto ads 제거: TagError 방지) -->
     <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=pub-7730946066495644" crossorigin="anonymous"></script>
-    <script>
-        // auto ads는 페이지당 1회만 enable_page_level_ads를 호출해야 함
-        if (!window.__kobot_auto_ads_initialized) {
-            (adsbygoogle = window.adsbygoogle || []).push({
-                google_ad_client: "pub-7730946066495644",
-                enable_page_level_ads: true,
-                overlays: {bottom: true}
-            });
-            window.__kobot_auto_ads_initialized = true;
-        }
-    </script>
+    <!-- auto ads 호출을 제거해 'Only one enable_page_level_ads' 에러를 방지합니다. -->
 
     <!-- 백엔드 API 베이스 URL (배포용) -->
     <script>
@@ -40,7 +30,7 @@
     <div>
         <p class="eyebrow" id="eyebrow-text">Kobot Pick</p>
         <h1 id="hero-title">오늘의 AI 추천 포트폴리오</h1>
-        <p class="sub" id="hero-sub">해외/국내/ETF 추천을 한 번에 확인하세요.</p>
+        <p class="sub" id ="hero-sub">해외/국내/ETF 추천을 한 번에 확인하세요.</p>
     </div>
     <div class="hero-actions">
         <select id="lang-select" class="lang-select">
