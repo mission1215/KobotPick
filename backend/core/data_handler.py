@@ -1,169 +1,164 @@
-# kobotPick/backEnd/core/data_handler.py
+# backend/core/data_handler.py
+# yfinance 완전 삭제 → Finnhub + Alpha Vantage + Google News RSS
 
-import yfinance as yf
+import httpx
 import pandas as pd
 import requests
 import xml.etree.ElementTree as ET
 from typing import Optional, Dict, Any, List
 from urllib.parse import quote_plus
+import os
+from datetime import datetime
+import pandas_ta as ta
 
-def get_historical_data(ticker: str, period: str = "3mo") -> Optional[pd.DataFrame]:
-    """yfinance를 사용하여 종목의 과거 시세 데이터를 가져옵니다."""
-    try:
-        ticker_obj = yf.Ticker(ticker)
-        hist = ticker_obj.history(period=period)
-        if hist.empty:
-            return None
-        return hist
-    except Exception as e:
-        print(f"Error fetching historical data for {ticker}: {e}")
+# 환경변수에서 키 가져오기 (Render에서 설정할거임)
+FINNHUB_KEY = os.getenv("FINNHUB_KEY")  # 필수!
+ALPHA_KEY = os.getenv("ALPHA_VANTAGE_KEY", "")  # 보조용 (없어도 됨)
+
+# Finnhub 기본 엔드포인트
+FINNHUB_BASE = "https://finnhub.io/api/v1"
+
+# 한국 주식 티커 정규화 (005930 → 005930:KRX)
+def normalize_ticker(ticker: str) -> str:
+    ticker = ticker.upper().replace(".KS", "").replace(".KQ", "")
+    if ticker.isdigit() and len(ticker) == 6:
+        return f"{ticker}:KRX"
+    return ticker
+
+async def _finnhub_get(url: str, params: dict = None):
+    if not FINNHUB_KEY:
+        return None
+    params = params or {}
+    params["token"] = FINNHUB_KEY
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        r = await client.get(url, params=params)
+        if r.status_code == 200:
+            return r.json()
         return None
 
-def get_stock_info(ticker: str) -> Dict[str, Any]:
-    """yfinance를 사용하여 종목의 기본 정보를 가져옵니다."""
-    try:
-        ticker_obj = yf.Ticker(ticker)
-        info = ticker_obj.info
-        # 필요한 정보만 추출하거나, 전체 정보를 반환
-        return {
-            'name': info.get('shortName', ticker),
-            'current_price': info.get('currentPrice'),
-            'regular_market_price': info.get('regularMarketPrice'),
-            'previous_close': info.get('previousClose'),
-            'market_cap': info.get('marketCap'),
-            'per': info.get('trailingPE'),
-            'pbr': info.get('priceToBook'),
-            'roe': info.get('returnOnEquity'),
-            'dividend_yield': info.get('dividendYield'),
-            'psr': info.get('priceToSalesTrailing12Months'),
-            'currency': info.get('currency'),
-            'exchange': info.get('exchange'),
-            'sector': info.get('sector'),
-            'industry': info.get('industry'),
-            'website': info.get('website'),
-            'summary': info.get('longBusinessSummary'),
-            'employees': info.get('fullTimeEmployees'),
-        }
-    except Exception as e:
-        print(f"Error fetching stock info for {ticker}: {e}")
-        return {'name': ticker, 'current_price': None}
+def get_historical_data(ticker: str, period: str = "3mo") -> Optional[pd.DataFrame]:
+    ticker_norm = normalize_ticker(ticker)
+    # Finnhub은 일봉 최대 1년까지 무료로 줌
+    url = f"{FINNHUB_BASE}/stock/candle"
+    params = {
+        "symbol": ticker_norm,
+        "resolution": "D",
+        "from": int(datetime(2020, 1, 1).timestamp()),  # 넉넉하게
+        "to": int(datetime.now().timestamp()),
+    }
+    data = requests.get(url, params=params).json()
+    if data.get("s") != "ok":
+        return None
 
+    df = pd.DataFrame({
+        "Date": pd.to_datetime(data["t"], unit="s"),
+        "Open": data["o"],
+        "High": data["h"],
+        "Low": data["l"],
+        "Close": data["c"],
+        "Volume": data["v"],
+    }).set_index("Date")
+    return df.tail(90)  # 3개월치만
+
+def get_stock_info(ticker: str) -> Dict[str, Any]:
+    ticker_norm = normalize_ticker(ticker)
+    # 1. 현재가 + 기본 정보
+    quote = requests.get(f"{FINNHUB_BASE}/quote", params={"symbol": ticker_norm}).json()
+    profile = requests.get(f"{FINNHUB_BASE}/stock/profile2", params={"symbol": ticker_norm}).json()
+
+    if not quote.get("c"):
+        return {"name": ticker, "current_price": None}
+
+    return {
+        "name": profile.get("name", ticker),
+        "current_price": quote["c"],
+        "regularMarketPrice": quote["c"],
+        "previous_close": quote["pc"],
+        "currency": profile.get("currency", "USD"),
+        "exchange": profile.get("exchange", ""),
+        "sector": profile.get("finnhubIndustry"),
+        "market_cap": profile.get("marketCapitalization"),
+        "per": None,  # 무료 플랜에선 안 줌 → 나중에 유료로
+        "pbr": None,
+        "roe": None,
+        "dividend_yield": None,
+        "longBusinessSummary": profile.get("description", ""),
+        "fullTimeEmployees": profile.get("employeeTotal"),
+        "website": profile.get("weburl"),
+    }
 
 def get_news_items(ticker: str, limit: int = 6, lang: str = "en") -> List[Dict[str, Any]]:
-    """
-    yfinance 뉴스에 실패/부족하면 Google News RSS로 보완.
-    lang: en/ko/ja/zh 등 Google News hl 파라미터에 사용.
-    """
-    items: List[Dict[str, Any]] = []
-    try:
-        news = yf.Ticker(ticker).news or []
-        for n in news[:limit]:
-            title = n.get("title")
-            link = n.get("link")
-            if not title or not link:
-                continue
-            items.append({
-                "title": title,
-                "link": link,
-                "publisher": n.get("publisher"),
-                "published_at": n.get("providerPublishTime")
-            })
-    except Exception as e:
-        print(f"Error fetching news for {ticker}: {e}")
+    # Finnhub 뉴스 (무료로 60 calls/min)
+    ticker_norm = normalize_ticker(ticker)
+    params = {
+        "symbol": ticker_norm if ":" in ticker_norm else ticker,
+        "from": (datetime.now().date() - pd.Timedelta(days=7)).isoformat(),
+        "to": datetime.now().date().isoformat(),
+    }
+    news = requests.get(f"{FINNHUB_BASE}/company-news", params=params).json()
 
-    # 보완: Google News RSS (무료, 키 없음)
+    items = []
+    for n in news[:limit]:
+        if n.get("headline") and n.get("url"):
+            items.append({
+                "title": n["headline"],
+                "link": n["url"],
+                "publisher": n.get("source"),
+                "published_at": datetime.fromtimestamp(n["datetime"]).isoformat() if n.get("datetime") else None,
+            })
+    # 부족하면 Google News 보완 (기존 코드 그대로)
     if len(items) < limit:
+        # 기존 Google News RSS 코드 복사 (너가 이미 잘 짜놨던거 그대로)
         try:
             query = quote_plus(ticker)
-            # Google News 지역/언어 파라미터: hl=언어, gl=국가
-            lang = lang or "en"
-            region = "KR" if lang.startswith("ko") else "US"
-            url = f"https://news.google.com/rss/search?q={query}&hl={lang}&gl={region}"
+            url = f"https://news.google.com/rss/search?q={query}&hl={lang}&gl=KR"
             resp = requests.get(url, timeout=5)
             if resp.ok:
                 root = ET.fromstring(resp.content)
-                channel = root.find('channel')
-                if channel is not None:
-                    for item in channel.findall('item'):
-                        title_el = item.find('title')
-                        link_el = item.find('link')
-                        pub_el = item.find('pubDate')
-                        title = title_el.text if title_el is not None else None
-                        link = link_el.text if link_el is not None else None
-                        if not title or not link:
-                            continue
-                        items.append({
-                            "title": title,
-                            "link": link,
-                            "publisher": "Google News",
-                            "published_at": pub_el.text if pub_el is not None else None
-                        })
-                        if len(items) >= limit:
-                            break
-        except Exception as e:
-            print(f"Error fetching Google News RSS for {ticker}: {e}")
-
+                for item in root.findall('.//item')[:limit-len(items)]:
+                    title = item.find('title').text
+                    link = item.find('link').text
+                    items.append({"title": title, "link": link, "publisher": "Google News"})
+        except:
+            pass
     return items[:limit]
 
-
 def _calc_change(ticker: str) -> Optional[Dict[str, Any]]:
-    """최근 2일 종가로 등락 계산."""
-    try:
-        t = yf.Ticker(ticker)
-        hist = t.history(period="5d")
-        if hist is None or hist.empty or len(hist["Close"]) < 2:
-            return None
-        last = hist["Close"].iloc[-1]
-        prev = hist["Close"].iloc[-2]
-        change = last - prev
-        pct = (change / prev) * 100 if prev else 0
-        return {"price": float(last), "change": float(change), "change_pct": float(pct)}
-    except Exception as e:
-        print(f"Error calc change for {ticker}: {e}")
+    ticker_norm = normalize_ticker(ticker)
+    quote = requests.get(f"{FINNHUB_BASE}/quote", params={"symbol": ticker_norm}).json()
+    if not quote.get("c"):
         return None
-
+    price = quote["c"]
+    prev = quote["pc"]
+    change = price - prev
+    pct = (change / prev) * 100 if prev else 0
+    return {"price": price, "change": change, "change_pct": pct}
 
 def get_market_snapshot() -> Dict[str, Any]:
-    """주요 지수/환율 요약."""
-    tickers = {
+    indices = {
         "SPX": "^GSPC",
         "NASDAQ": "^IXIC",
-        "KOSPI": "^KS11",
-        "USDKRW": "KRW=X",
+        "KOSPI": "000001:KRX",  # KOSPI는 이렇게
+        "USDKRW": "USD/KRW",
     }
     result = {}
-    for name, tk in tickers.items():
-        data = _calc_change(tk)
+    for name, sym in indices.items():
+        norm = normalize_ticker(sym)
+        data = _calc_change(norm if norm else sym)
         if data:
             result[name] = data
     return result
 
-
 def get_global_headlines(limit: int = 6) -> List[Dict[str, Any]]:
-    """시장 전반 뉴스 헤드라인 (Google News RSS)."""
-    items: List[Dict[str, Any]] = []
-    try:
-        query = quote_plus("stock market finance")
-        url = f"https://news.google.com/rss/search?q={query}"
-        resp = requests.get(url, timeout=5)
-        if resp.ok:
-            root = ET.fromstring(resp.content)
-            channel = root.find('channel')
-            if channel is not None:
-                for item in channel.findall('item')[:limit]:
-                    title_el = item.find('title')
-                    link_el = item.find('link')
-                    pub_el = item.find('pubDate')
-                    title = title_el.text if title_el is not None else None
-                    link = link_el.text if link_el is not None else None
-                    if not title or not link:
-                        continue
-                    items.append({
-                        "title": title,
-                        "link": link,
-                        "publisher": "Google News",
-                        "published_at": pub_el.text if pub_el is not None else None
-                    })
-    except Exception as e:
-        print(f"Error fetching global headlines: {e}")
-    return items[:limit]
+    # Finnhub 시장 뉴스
+    news = requests.get(f"{FINNHUB_BASE}/news", params={"category": "general"}).json()
+    return [
+        {
+            "title": n["headline"],
+            "link": n["url"],
+            "publisher": n.get("source"),
+            "published_at": datetime.fromtimestamp(n["datetime"]).isoformat() if n.get("datetime") else None,
+        }
+        for n in news[:limit]
+        if n.get("headline") and n.get("url")
+    ]

@@ -1,7 +1,8 @@
 fastapi
 uvicorn
 pandas
-yfinance
 pandas-ta
 pydantic
 pydantic-settings
+httpx
+# yfinance 완전 삭제!
