@@ -111,11 +111,8 @@ h1 {
 .headline-item:hover { text-decoration: underline; }
 .headline-empty { color: #9e9e9e; }
 
-/* --- 검색 & 즐겨찾기 바 --- */
+/* --- 검색 & 즐겨찾기 --- */
 .search-fav-bar {
-    display: grid;
-    grid-template-columns: 2fr 1.2fr;
-    gap: 14px;
     margin: 12px 0 6px;
 }
 .search-box {
@@ -153,17 +150,18 @@ h1 {
     transform: translateY(-1px);
     box-shadow: 0 14px 28px rgba(0,188,212,0.45);
 }
-.favorites-box {
+.favorites-section {
     background: linear-gradient(135deg, rgba(21,26,36,0.9), rgba(15,22,32,0.92));
     border: 1px solid rgba(255,255,255,0.06);
     border-radius: 14px;
     padding: 12px;
     box-shadow: 0 14px 30px rgba(0,0,0,0.28);
+    margin-bottom: 12px;
 }
-.favorites-box .section-title {
-    margin: 0 0 8px;
+.favorites-section .section-title {
+    margin: 0 0 10px;
 }
-.favorites-box .card-container {
+.favorites-section .card-container {
     grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
 }
 .muted {
@@ -502,7 +500,6 @@ h1 {
 @media (max-width: 768px) {
     body { padding: 18px; }
     .hero { flex-direction: column; align-items: flex-start; gap: 12px; }
-    .search-fav-bar { grid-template-columns: 1fr; }
     .card-container { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
     .stock-card { padding: 14px; }
     #chart-area { height: 320px; }
