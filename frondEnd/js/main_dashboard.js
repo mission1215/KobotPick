@@ -165,6 +165,18 @@ document.addEventListener('DOMContentLoaded', () => {
     setInterval(fetchHeadlines, REFRESH_MS * 3);
 });
 
+// fetch에 타임아웃을 걸어 API 지연 시 무한 대기하지 않도록 함
+async function fetchWithTimeout(url, { timeout = 12000, ...options } = {}) {
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), timeout);
+    try {
+        const response = await fetch(url, { ...options, signal: controller.signal });
+        return response;
+    } finally {
+        clearTimeout(id);
+    }
+}
+
 async function fetchAndRenderPicks() {
     const loadingElement = document.getElementById('loading');
     const usPicksContainer = document.getElementById('us-picks');
@@ -182,7 +194,7 @@ async function fetchAndRenderPicks() {
 
     try {
         // 메인 picks 호출
-        const response = await fetch(`${API_BASE_URL}/picks`);
+        const response = await fetchWithTimeout(`${API_BASE_URL}/picks`, { timeout: 12000 });
         if (!response.ok) throw new Error('Failed to fetch Kobot Picks');
         const picks = await response.json();
         lastPicks = picks || [];
@@ -191,8 +203,9 @@ async function fetchAndRenderPicks() {
         const enriched = await Promise.all(
             picks.map(async (pick) => {
                 try {
-                    const recRes = await fetch(
-                        `${API_BASE_URL}/recommendation/${encodeURIComponent(pick.ticker)}`
+                    const recRes = await fetchWithTimeout(
+                        `${API_BASE_URL}/recommendation/${encodeURIComponent(pick.ticker)}`,
+                        { timeout: 12000 }
                     );
                     if (!recRes.ok) {
                         throw new Error(`recommendation error: ${recRes.status}`);
@@ -269,8 +282,11 @@ async function fetchAndRenderPicks() {
             .forEach((p) => etfPicksContainer && renderCard(etfPicksContainer, p));
     } catch (error) {
         console.error('Error fetching picks:', error);
-        usPicksContainer.innerHTML =
-            `<p style="color:red; text-align: center;">추천 목록 로드 실패: ${error.message}</p>`;
+        const msg =
+            error.name === 'AbortError'
+                ? '추천 목록 로드가 지연되어 중단되었습니다. 잠시 후 다시 시도해 주세요.'
+                : `추천 목록 로드 실패: ${error.message}`;
+        usPicksContainer.innerHTML = `<p style="color:red; text-align: center;">${msg}</p>`;
         krPicksContainer.innerHTML = '';
         if (etfPicksContainer) etfPicksContainer.innerHTML = '';
     } finally {
@@ -290,7 +306,10 @@ async function renderFavorites() {
     try {
         const results = await Promise.all(
             favs.map(async (ticker) => {
-                const res = await fetch(`${API_BASE_URL}/recommendation/${encodeURIComponent(ticker)}`);
+                const res = await fetchWithTimeout(
+                    `${API_BASE_URL}/recommendation/${encodeURIComponent(ticker)}`,
+                    { timeout: 12000 }
+                );
                 if (!res.ok) throw new Error(res.status);
                 return await res.json();
             })
@@ -389,7 +408,7 @@ async function fetchSnapshot() {
     if (!box) return;
     box.innerHTML = '<div class="snapshot-skeleton"></div>';
     try {
-        const res = await fetch(`${API_BASE_URL}/market/snapshot`);
+        const res = await fetchWithTimeout(`${API_BASE_URL}/market/snapshot`, { timeout: 12000 });
         if (!res.ok) throw new Error(`snapshot error ${res.status}`);
         const data = await res.json();
         const entries = [
@@ -430,7 +449,7 @@ async function fetchHeadlines() {
     if (!track) return;
     track.innerHTML = '';
     try {
-        const res = await fetch(`${API_BASE_URL}/market/headlines`);
+        const res = await fetchWithTimeout(`${API_BASE_URL}/market/headlines`, { timeout: 12000 });
         if (!res.ok) throw new Error(`headline error ${res.status}`);
         const data = await res.json();
         const items = (data || [])
