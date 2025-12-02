@@ -31,11 +31,117 @@ def _cache_set(key: str, data):
 # ==================== 심볼 정규화 ====================
 def normalize_symbol(ticker: str) -> str:
     norm = ticker.upper()
+    if norm == "USD/KRW":
+        return "KRW=X"
     # 한국 6자리 숫자코드 → .KS
     base = norm.replace(".KQ", "").replace(".KS", "")
     if len(base) == 6 and base.isdigit():
         return f"{base}.KS"
     return norm
+
+# ==================== Yahoo Finance (크럼 없는 공개 엔드포인트) ====================
+def yahoo_quote(symbol: str) -> Optional[dict]:
+    """
+    무료 공개 엔드포인트를 사용해 현재가/기본 정보 조회.
+    별도 크럼(crumb)이나 쿠키가 필요 없는 quote API만 사용한다.
+    """
+    try:
+        r = requests.get(
+            "https://query1.finance.yahoo.com/v7/finance/quote",
+            params={"symbols": symbol},
+            timeout=8,
+        )
+        if r.status_code != 200:
+            return None
+        results = r.json().get("quoteResponse", {}).get("result", [])
+        if not results:
+            return None
+        q = results[0]
+        price = q.get("regularMarketPrice")
+        prev = q.get("regularMarketPreviousClose", price)
+        if price is None:
+            return None
+        return {
+            "price": float(price),
+            "prev": float(prev) if prev is not None else None,
+            "currency": q.get("currency"),
+            "name": q.get("longName") or q.get("shortName") or symbol,
+            "exchange": q.get("fullExchangeName") or q.get("exchange"),
+            "market_cap": q.get("marketCap"),
+            "per": q.get("trailingPE"),
+            "pbr": q.get("priceToBook"),
+            "dividend_yield": q.get("trailingAnnualDividendYield"),
+            "industry": q.get("industry"),
+            "sector": q.get("sector"),
+            "employees": q.get("fullTimeEmployees"),
+            "website": q.get("website"),
+        }
+    except Exception:
+        return None
+
+
+def yahoo_history(symbol: str, range_str: str = "6mo") -> Optional[pd.DataFrame]:
+    """
+    크럼이 필요 없는 chart API로 일별 시계열을 수집한다.
+    6개월 구간이면 90일 이상 데이터를 확보할 수 있어 지표 계산이 가능하다.
+    """
+    try:
+        r = requests.get(
+            f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}",
+            params={"range": range_str, "interval": "1d", "events": "div,split"},
+            timeout=12,
+        )
+        if r.status_code != 200:
+            return None
+        chart = r.json().get("chart", {})
+        results = chart.get("result") or []
+        if not results:
+            return None
+        result = results[0]
+        ts = result.get("timestamp")
+        quote = (result.get("indicators") or {}).get("quote", [{}])[0]
+        if not ts or not quote.get("close"):
+            return None
+        df = pd.DataFrame(
+            {
+                "Date": pd.to_datetime(ts, unit="s"),
+                "Open": quote.get("open"),
+                "High": quote.get("high"),
+                "Low": quote.get("low"),
+                "Close": quote.get("close"),
+                "Volume": quote.get("volume"),
+            }
+        )
+        df = df.dropna(subset=["Close"])
+        return df.set_index("Date").sort_index()
+    except Exception:
+        return None
+
+
+def yahoo_profile(symbol: str) -> Dict[str, Any]:
+    """
+    quoteSummary의 assetProfile 모듈을 통해 섹터/산업/홈페이지/직원수 등을 보완한다.
+    """
+    try:
+        r = requests.get(
+            f"https://query1.finance.yahoo.com/v10/finance/quoteSummary/{symbol}",
+            params={"modules": "assetProfile"},
+            timeout=8,
+        )
+        if r.status_code != 200:
+            return {}
+        result = (r.json().get("quoteSummary", {}) or {}).get("result") or []
+        profile = result[0].get("assetProfile", {}) if result else {}
+        return {
+            "industry": profile.get("industry"),
+            "sector": profile.get("sector"),
+            "website": profile.get("website"),
+            "employees": profile.get("fullTimeEmployees"),
+            "summary": profile.get("longBusinessSummary"),
+            "country": profile.get("country"),
+        }
+    except Exception:
+        return {}
 
 # ==================== Finnhub ====================
 def finnhub_quote(symbol: str) -> Optional[dict]:
@@ -175,10 +281,12 @@ def get_current_price(ticker: str) -> Optional[dict]:
     if cached:
         return cached
 
-    result = finnhub_quote(symbol) or alpha_quote(symbol)
+    result = finnhub_quote(symbol) or alpha_quote(symbol) or yahoo_quote(symbol)
     if result:
-        change = result["price"] - result["prev"]
-        pct = (change / result["prev"]) * 100 if result["prev"] else 0
+        prev_val = result.get("prev")
+        base_prev = prev_val if prev_val not in (None, 0) else result["price"]
+        change = result["price"] - base_prev
+        pct = (change / base_prev) * 100 if base_prev else 0
         final = {
             "price": round(result["price"], 2),
             "change": round(change, 2),
@@ -191,31 +299,34 @@ def get_current_price(ticker: str) -> Optional[dict]:
 
 def get_historical_data(ticker: str, period: str = "3mo") -> Optional[pd.DataFrame]:
     symbol = normalize_symbol(ticker)
-    df = finnhub_historical(symbol)
-    if df is None:
-        df = alpha_historical(symbol)
+    df = finnhub_historical(symbol) or alpha_historical(symbol) or yahoo_history(symbol)
     return df
 
 def get_stock_info(ticker: str) -> Dict[str, Any]:
     symbol = normalize_symbol(ticker)
-    quote = finnhub_quote(symbol) or alpha_quote(symbol) or {}
-    profile = finnhub_profile(symbol)
+    quote = finnhub_quote(symbol) or alpha_quote(symbol) or yahoo_quote(symbol) or {}
+    profile_finn = finnhub_profile(symbol)
+    profile_yahoo = yahoo_profile(symbol)
+    profile = {**profile_yahoo, **profile_finn}
     return {
-        "name": profile.get("name", ticker),
+        "name": profile.get("name") or quote.get("name") or ticker,
         "current_price": quote.get("price"),
         "regular_market_price": quote.get("price"),
         "previous_close": quote.get("prev"),
-        "currency": profile.get("currency", "USD"),
-        "exchange": profile.get("exchange", ""),
-        "sector": profile.get("finnhubIndustry"),
-        "market_cap": profile.get("marketCapitalization"),
-        "per": None,
-        "pbr": None,
+        "currency": profile.get("currency") or quote.get("currency") or "USD",
+        "exchange": profile.get("exchange") or quote.get("exchange") or "",
+        "sector": profile.get("finnhubIndustry") or profile.get("sector"),
+        "industry": profile.get("industry"),
+        "market_cap": profile.get("marketCapitalization") or quote.get("market_cap"),
+        "per": quote.get("per"),
+        "pbr": quote.get("pbr"),
         "roe": None,
-        "dividend_yield": None,
-        "longBusinessSummary": profile.get("description", ""),
-        "fullTimeEmployees": profile.get("employeeTotal"),
-        "website": profile.get("weburl"),
+        "dividend_yield": quote.get("dividend_yield"),
+        "summary": profile.get("summary") or profile.get("description", ""),
+        "longBusinessSummary": profile.get("description", "") or profile.get("summary", ""),
+        "fullTimeEmployees": profile.get("employeeTotal") or profile.get("employees"),
+        "employees": profile.get("employeeTotal") or profile.get("employees"),
+        "website": profile.get("weburl") or profile.get("website"),
     }
 
 def get_news_items(ticker: str, limit: int = 6, lang: str = "en") -> List[Dict[str, Any]]:
