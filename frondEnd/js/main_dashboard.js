@@ -9,6 +9,29 @@ const API_BASE_URL = (
 const REFRESH_MS = 60000; // 1분마다 새로고침 (유사 실시간)
 const FAVORITES_KEY = 'kobot-favorites';
 let lastPicks = [];
+// 검색 보조용 이름/티커 매핑 (공백/구두점 제거 후 비교)
+const NAME_TICKER_MAP = {
+    APPLE: 'AAPL',
+    APPLEINC: 'AAPL',
+    TESLA: 'TSLA',
+    TESLAINC: 'TSLA',
+    NVIDIA: 'NVDA',
+    NVIDIACORP: 'NVDA',
+    MSFT: 'MSFT',
+    MICROSOFT: 'MSFT',
+    MICROSOFTCORP: 'MSFT',
+    AMAZON: 'AMZN',
+    AMAZONCOM: 'AMZN',
+    AMZN: 'AMZN',
+    SAMSUNG: '005930.KS',
+    삼성전자: '005930.KS',
+    삼성: '005930.KS',
+    삼성전자우: '005935.KS',
+    SKHYNIX: '000660.KS',
+    SK하이닉스: '000660.KS',
+    NAVER: '035420.KS',
+    LG화학: '051910.KS',
+};
 
 const TEXT = {
     ko: {
@@ -107,14 +130,20 @@ document.addEventListener('DOMContentLoaded', () => {
     const doSearch = () => {
         const val = searchInput?.value?.trim();
         if (!val) return;
-        // 한국 6자리 숫자 종목코드면 .KS 자동 부착
-        const upper = /^[0-9]{6}$/.test(val) ? `${val}.KS` : val.toUpperCase();
+        const isNumberCode = /^[0-9]{6}$/.test(val);
+        const upper = isNumberCode ? `${val}.KS` : val.toUpperCase();
+        const normalizedKey = upper.replace(/[^A-Z0-9가-힣]/g, '');
+
+        // 1) 최근 picks에서 티커/이름 매칭
         const found = lastPicks.find(
             (p) =>
                 p.ticker.toUpperCase() === upper ||
                 p.name.toLowerCase().includes(val.toLowerCase())
         );
-        const target = found ? found.ticker : upper;
+        // 2) 사전 매핑
+        const mapped = NAME_TICKER_MAP[normalizedKey];
+
+        const target = found?.ticker || mapped || upper;
         window.location.href = `detail.html?ticker=${encodeURIComponent(target)}`;
     };
     if (searchBtn && searchInput) {
