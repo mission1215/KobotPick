@@ -31,9 +31,9 @@ const FALLBACK_PICKS = [
 ].map((p) => ({
     ...p,
     rec: {
-        current_price: 0,
+        current_price: null,
         currency: p.country === 'KR' ? 'KRW' : 'USD',
-        recommendation: { action: 'HOLD', buy_price: 0, sell_price: 0 },
+        recommendation: { action: 'HOLD', buy_price: null, sell_price: null },
     },
 }));
 // 검색 보조용 이름/티커 매핑 (공백/구두점 제거 후 비교)
@@ -107,6 +107,18 @@ const TEXT = {
     },
 };
 
+const CACHE_KEYS = {
+    picks: 'kobot-cache-picks',
+    snapshot: 'kobot-cache-snapshot',
+    headlines: 'kobot-cache-headlines',
+};
+
+const CACHE_TTL_MS = {
+    picks: 15 * 60 * 1000, // 15분
+    snapshot: 5 * 60 * 1000, // 5분
+    headlines: 30 * 60 * 1000, // 30분
+};
+
 let currentLang = localStorage.getItem('kobot-lang') || 'ko';
 
 function loadFavorites() {
@@ -120,6 +132,32 @@ function loadFavorites() {
 
 function saveFavorites(list) {
     localStorage.setItem(FAVORITES_KEY, JSON.stringify(list));
+}
+
+function loadCache(key, ttlMs) {
+    try {
+        const raw = localStorage.getItem(key);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        if (!parsed?.ts || Date.now() - parsed.ts > ttlMs) return null;
+        return parsed.data;
+    } catch {
+        return null;
+    }
+}
+
+function saveCache(key, data) {
+    try {
+        localStorage.setItem(
+            key,
+            JSON.stringify({
+                ts: Date.now(),
+                data,
+            })
+        );
+    } catch {
+        // localStorage가 막힌 경우 무시
+    }
 }
 
 function isFavorite(ticker) {
@@ -181,6 +219,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // 초기 데이터 로딩
+    renderCachedPicks();
+    renderCachedSnapshot();
+    renderCachedHeadlines();
     fetchAndRenderPicks();
     fetchSnapshot();
     fetchHeadlines();
@@ -204,6 +245,91 @@ async function fetchWithTimeout(url, { timeout = REQUEST_TIMEOUT_MS, ...options 
     }
 }
 
+function renderPickSections(items, { usContainer, krContainer, etfContainer }) {
+    if (!usContainer || !krContainer) return;
+
+    usContainer.innerHTML = '';
+    krContainer.innerHTML = '';
+    if (etfContainer) etfContainer.innerHTML = '';
+    usContainer.dataset.hasData = '1';
+    krContainer.dataset.hasData = '1';
+    if (etfContainer) etfContainer.dataset.hasData = '1';
+
+    const renderCard = (target, item) => {
+        const card = document.createElement('div');
+        card.className = 'stock-card';
+        card.setAttribute(
+            'onclick',
+            `location.href='detail.html?ticker=${encodeURIComponent(item.ticker)}'`
+        );
+
+        const rec = item.rec?.recommendation;
+        const price = item.rec?.current_price;
+        const buy = rec?.buy_price;
+        const sell = rec?.sell_price;
+        const action = rec?.action || 'HOLD';
+        const currency = item.rec?.currency || (item.country === 'KR' ? 'KRW' : 'USD');
+        const formattedPrice = formatPrice(price, currency);
+        const formattedBuy = formatPrice(buy, currency);
+        const formattedSell = formatPrice(sell, currency);
+
+        card.innerHTML = `
+            <div class="card-top">
+                <div class="name top-name">${item.name}</div>
+                <div class="badge">${item.country}</div>
+                <button class="fav-btn" type="button">${isFavorite(item.ticker) ? '★' : '☆'}</button>
+            </div>
+            <div class="ticker subtle-ticker">${item.ticker}</div>
+            <div class="price-block">
+                <div class="price">${formattedPrice}</div>
+                <div class="action ${action.toLowerCase()}">${action}</div>
+            </div>
+            <div class="targets">
+                <div>Buy <span>${formattedBuy}</span></div>
+                <div>Sell <span>${formattedSell}</span></div>
+            </div>
+            <div class="score">Score ${item.score}</div>
+        `;
+        target.appendChild(card);
+        const favBtn = card.querySelector('.fav-btn');
+        if (favBtn) {
+            favBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                toggleFavorite(item.ticker);
+                const on = isFavorite(item.ticker);
+                favBtn.textContent = on ? '★' : '☆';
+            });
+        }
+    };
+
+    items
+        .filter((p) => p.country === 'US')
+        .forEach((p) => renderCard(usContainer, p));
+    items
+        .filter((p) => p.country === 'KR')
+        .forEach((p) => renderCard(krContainer, p));
+    items
+        .filter((p) => p.country === 'ETF')
+        .forEach((p) => etfContainer && renderCard(etfContainer, p));
+}
+
+function renderCachedPicks() {
+    const loadingElement = document.getElementById('loading');
+    const usPicksContainer = document.getElementById('us-picks');
+    const krPicksContainer = document.getElementById('kr-picks');
+    const etfPicksContainer = document.getElementById('etf-picks');
+    const cached = loadCache(CACHE_KEYS.picks, CACHE_TTL_MS.picks);
+    if (!cached || !cached.length || !usPicksContainer || !krPicksContainer) return;
+    lastRenderedPicks = cached;
+    lastPicks = cached.map(({ ticker, name }) => ({ ticker, name }));
+    if (loadingElement) loadingElement.style.display = 'none';
+    renderPickSections(cached, {
+        usContainer: usPicksContainer,
+        krContainer: krPicksContainer,
+        etfContainer: etfPicksContainer,
+    });
+}
+
 async function fetchAndRenderPicks() {
     const loadingElement = document.getElementById('loading');
     const usPicksContainer = document.getElementById('us-picks');
@@ -215,93 +341,49 @@ async function fetchAndRenderPicks() {
     loadingElement.style.display = 'block';
     loadingElement.innerText = TEXT[currentLang].loading;
 
-    showSkeleton(usPicksContainer, 5);
-    showSkeleton(krPicksContainer, 5);
-    if (etfPicksContainer) showSkeleton(etfPicksContainer, 5);
-
-    const renderSections = (items) => {
-        // 섹션 클리어
-        usPicksContainer.innerHTML = '';
-        krPicksContainer.innerHTML = '';
-        if (etfPicksContainer) etfPicksContainer.innerHTML = '';
-
-        const renderCard = (target, item) => {
-            const card = document.createElement('div');
-            card.className = 'stock-card';
-            card.setAttribute(
-                'onclick',
-                `location.href='detail.html?ticker=${encodeURIComponent(item.ticker)}'`
-            );
-
-            const rec = item.rec?.recommendation;
-            const price = item.rec?.current_price;
-            const buy = rec?.buy_price;
-            const sell = rec?.sell_price;
-            const action = rec?.action || 'HOLD';
-            const currency = item.rec?.currency || (item.country === 'KR' ? 'KRW' : 'USD');
-            const formattedPrice = formatPrice(price, currency);
-            const formattedBuy = formatPrice(buy, currency);
-            const formattedSell = formatPrice(sell, currency);
-
-            card.innerHTML = `
-                <div class="card-top">
-                    <div class="name top-name">${item.name}</div>
-                    <div class="badge">${item.country}</div>
-                    <button class="fav-btn" type="button">${isFavorite(item.ticker) ? '★' : '☆'}</button>
-                </div>
-                <div class="ticker subtle-ticker">${item.ticker}</div>
-                <div class="price-block">
-                    <div class="price">${formattedPrice}</div>
-                    <div class="action ${action.toLowerCase()}">${action}</div>
-                </div>
-                <div class="targets">
-                    <div>Buy <span>${formattedBuy}</span></div>
-                    <div>Sell <span>${formattedSell}</span></div>
-                </div>
-                <div class="score">Score ${item.score}</div>
-            `;
-            target.appendChild(card);
-            const favBtn = card.querySelector('.fav-btn');
-            if (favBtn) {
-                favBtn.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    toggleFavorite(item.ticker);
-                    const on = isFavorite(item.ticker);
-                    favBtn.textContent = on ? '★' : '☆';
-                });
-            }
-        };
-
-        items
-            .filter((p) => p.country === 'US')
-            .forEach((p) => renderCard(usPicksContainer, p));
-        items
-            .filter((p) => p.country === 'KR')
-            .forEach((p) => renderCard(krPicksContainer, p));
-        items
-            .filter((p) => p.country === 'ETF')
-            .forEach((p) => etfPicksContainer && renderCard(etfPicksContainer, p));
-    };
+    const hasExistingData = usPicksContainer.dataset.hasData === '1';
+    if (!hasExistingData) {
+        showSkeleton(usPicksContainer, 5);
+        showSkeleton(krPicksContainer, 5);
+        if (etfPicksContainer) showSkeleton(etfPicksContainer, 5);
+    }
 
     try {
         const enriched = await getPicksWithRecommendations(PICKS_TIMEOUT_MS);
         lastRenderedPicks = enriched;
-        renderSections(enriched);
+        lastPicks = enriched.map(({ ticker, name }) => ({ ticker, name }));
+        saveCache(CACHE_KEYS.picks, enriched);
+        renderPickSections(enriched, {
+            usContainer: usPicksContainer,
+            krContainer: krPicksContainer,
+            etfContainer: etfPicksContainer,
+        });
     } catch (error) {
         console.error('Error fetching picks:', error);
-        if (error.name === 'AbortError' && lastRenderedPicks.length) {
-            // 네트워크 지연 시 직전 성공 데이터를 보여준다.
-            renderSections(lastRenderedPicks);
+        const cached = loadCache(CACHE_KEYS.picks, CACHE_TTL_MS.picks);
+        if (lastRenderedPicks.length) {
+            lastPicks = lastRenderedPicks.map(({ ticker, name }) => ({ ticker, name }));
+            renderPickSections(lastRenderedPicks, {
+                usContainer: usPicksContainer,
+                krContainer: krPicksContainer,
+                etfContainer: etfPicksContainer,
+            });
+        } else if (cached?.length) {
+            lastRenderedPicks = cached;
+            lastPicks = cached.map(({ ticker, name }) => ({ ticker, name }));
+            renderPickSections(cached, {
+                usContainer: usPicksContainer,
+                krContainer: krPicksContainer,
+                etfContainer: etfPicksContainer,
+            });
         } else {
-            const msg =
-                error.name === 'AbortError'
-                    ? '추천 목록 로드가 지연되어 중단되었습니다. 잠시 후 다시 시도해 주세요.'
-                    : `추천 목록 로드 실패: ${error.message || '네트워크 오류'}`;
-            usPicksContainer.innerHTML = `<p style="color:red; text-align: center;">${msg}</p>`;
-            krPicksContainer.innerHTML = '';
-            if (etfPicksContainer) etfPicksContainer.innerHTML = '';
-            // API 실패 시에도 기본 리스트를 보여준다.
-            renderSections(FALLBACK_PICKS);
+            renderPickSections(FALLBACK_PICKS, {
+                usContainer: usPicksContainer,
+                krContainer: krPicksContainer,
+                etfContainer: etfPicksContainer,
+            });
+            lastRenderedPicks = FALLBACK_PICKS;
+            lastPicks = FALLBACK_PICKS.map(({ ticker, name }) => ({ ticker, name }));
         }
     } finally {
         loadingElement.style.display = 'none';
@@ -461,72 +543,118 @@ function showSkeleton(container, count) {
     container.innerHTML = skeleton.join('');
 }
 
+function renderSnapshotContent(box, data) {
+    if (!box) return;
+    box.dataset.hasData = '1';
+    const entries = [
+        { key: 'SPX', label: 'S&P 500' },
+        { key: 'NASDAQ', label: 'Nasdaq' },
+        { key: 'KOSPI', label: 'KOSPI' },
+        { key: 'USDKRW', label: 'USD/KRW' },
+    ];
+    const html = entries
+        .map((e) => {
+            const v = data?.[e.key];
+            if (!v) return '';
+            const cls = v.change >= 0 ? 'pos' : 'neg';
+            const price =
+                e.key === 'USDKRW'
+                    ? `${Math.round(v.price).toLocaleString('ko-KR')}원`
+                    : v.price.toFixed(2);
+            const pct = v.change_pct.toFixed(2);
+            return `
+                <div class="snapshot-item">
+                    <div class="snap-label">${e.label}</div>
+                    <div class="snap-value ${cls}">${price}</div>
+                    <div class="snap-change ${cls}">
+                        ${v.change >= 0 ? '+' : ''}${pct}%
+                    </div>
+                </div>
+            `;
+        })
+        .join('');
+    box.innerHTML = html || '<div class="snapshot-error">시장 지표 데이터를 불러오지 못했습니다.</div>';
+}
+
+function renderCachedSnapshot() {
+    const box = document.getElementById('market-snapshot');
+    const cached = loadCache(CACHE_KEYS.snapshot, CACHE_TTL_MS.snapshot);
+    if (box && cached) {
+        renderSnapshotContent(box, cached);
+    }
+}
+
 async function fetchSnapshot() {
     const box = document.getElementById('market-snapshot');
     if (!box) return;
-    box.innerHTML = '<div class="snapshot-skeleton"></div>';
+    const hasData = box.dataset.hasData === '1';
+    if (!hasData) {
+        box.innerHTML = '<div class="snapshot-skeleton"></div>';
+    }
     try {
         const res = await fetchWithTimeout(`${API_BASE_URL}/market/snapshot`, { timeout: 12000 });
         if (!res.ok) throw new Error(`snapshot error ${res.status}`);
         const data = await res.json();
-        const entries = [
-            { key: 'SPX', label: 'S&P 500' },
-            { key: 'NASDAQ', label: 'Nasdaq' },
-            { key: 'KOSPI', label: 'KOSPI' },
-            { key: 'USDKRW', label: 'USD/KRW' },
-        ];
-        box.innerHTML = entries
-            .map((e) => {
-                const v = data[e.key];
-                if (!v) return '';
-                const cls = v.change >= 0 ? 'pos' : 'neg';
-                const price =
-                    e.key === 'USDKRW'
-                        ? `${Math.round(v.price).toLocaleString('ko-KR')}원`
-                        : v.price.toFixed(2);
-                const pct = v.change_pct.toFixed(2);
-                return `
-                    <div class="snapshot-item">
-                        <div class="snap-label">${e.label}</div>
-                        <div class="snap-value ${cls}">${price}</div>
-                        <div class="snap-change ${cls}">
-                            ${v.change >= 0 ? '+' : ''}${pct}%
-                        </div>
-                    </div>
-                `;
-            })
-            .join('');
+        saveCache(CACHE_KEYS.snapshot, data);
+        renderSnapshotContent(box, data);
     } catch (err) {
         console.error('snapshot error', err);
-        box.innerHTML = '<div class="snapshot-error">시장 지표를 불러오지 못했습니다.</div>';
+        const cached = loadCache(CACHE_KEYS.snapshot, CACHE_TTL_MS.snapshot);
+        if (cached) {
+            renderSnapshotContent(box, cached);
+        } else {
+            box.innerHTML = '<div class="snapshot-error">시장 지표를 불러오지 못했습니다.</div>';
+        }
+    }
+}
+
+function renderHeadlinesContent(track, data) {
+    if (!track) return;
+    track.dataset.hasData = '1';
+    const items = (data || [])
+        .slice(0, 6)
+        .map(
+            (n) => `
+            <a class="headline-item"
+               href="${n.link}"
+               target="_blank"
+               rel="noopener noreferrer">
+                ${n.title}
+            </a>
+        `
+        )
+        .join('');
+    track.innerHTML = items || `<span class="headline-empty">${TEXT[currentLang].news}</span>`;
+}
+
+function renderCachedHeadlines() {
+    const track = document.getElementById('headline-track');
+    const cached = loadCache(CACHE_KEYS.headlines, CACHE_TTL_MS.headlines);
+    if (track && cached?.length) {
+        renderHeadlinesContent(track, cached);
     }
 }
 
 async function fetchHeadlines() {
     const track = document.getElementById('headline-track');
     if (!track) return;
-    track.innerHTML = '';
+    const hasData = track.dataset.hasData === '1';
+    if (!hasData) {
+        track.innerHTML = '';
+    }
     try {
         const res = await fetchWithTimeout(`${API_BASE_URL}/market/headlines`, { timeout: 12000 });
         if (!res.ok) throw new Error(`headline error ${res.status}`);
         const data = await res.json();
-        const items = (data || [])
-            .slice(0, 6)
-            .map(
-                (n) => `
-                <a class="headline-item"
-                   href="${n.link}"
-                   target="_blank"
-                   rel="noopener noreferrer">
-                    ${n.title}
-                </a>
-            `
-            )
-            .join('');
-        track.innerHTML =
-            items || `<span class="headline-empty">${TEXT[currentLang].news}</span>`;
+        saveCache(CACHE_KEYS.headlines, data);
+        renderHeadlinesContent(track, data);
     } catch (err) {
         console.error('headline error', err);
-        track.innerHTML = `<span class="headline-empty">뉴스를 불러오지 못했습니다.</span>`;
+        const cached = loadCache(CACHE_KEYS.headlines, CACHE_TTL_MS.headlines);
+        if (cached?.length) {
+            renderHeadlinesContent(track, cached);
+        } else {
+            track.innerHTML = `<span class="headline-empty">뉴스를 불러오지 못했습니다.</span>`;
+        }
     }
 }
