@@ -7,6 +7,7 @@ const API_BASE_URL = (
 ).replace(/\/+$/, ""); 
 
 const REFRESH_MS = 60000; // 1분마다 새로고침 (유사 실시간)
+const FAVORITES_KEY = 'kobot-favorites';
 
 const TEXT = {
     ko: {
@@ -57,6 +58,35 @@ const TEXT = {
 
 let currentLang = localStorage.getItem('kobot-lang') || 'ko';
 
+function loadFavorites() {
+    try {
+        const raw = localStorage.getItem(FAVORITES_KEY);
+        return raw ? JSON.parse(raw) : [];
+    } catch {
+        return [];
+    }
+}
+
+function saveFavorites(list) {
+    localStorage.setItem(FAVORITES_KEY, JSON.stringify(list));
+}
+
+function isFavorite(ticker) {
+    return loadFavorites().includes(ticker);
+}
+
+function toggleFavorite(ticker) {
+    const list = loadFavorites();
+    const idx = list.indexOf(ticker);
+    if (idx >= 0) {
+        list.splice(idx, 1);
+    } else {
+        list.push(ticker);
+    }
+    saveFavorites(list);
+    renderFavorites();
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     applyLanguage(currentLang);
 
@@ -71,10 +101,25 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    const searchInput = document.getElementById('ticker-search');
+    const searchBtn = document.getElementById('search-btn');
+    const doSearch = () => {
+        const val = searchInput?.value?.trim();
+        if (!val) return;
+        window.location.href = `detail.html?ticker=${encodeURIComponent(val)}`;
+    };
+    if (searchBtn && searchInput) {
+        searchBtn.addEventListener('click', doSearch);
+        searchInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') doSearch();
+        });
+    }
+
     // 초기 데이터 로딩
     fetchAndRenderPicks();
     fetchSnapshot();
     fetchHeadlines();
+    renderFavorites();
 
     // 주기적 갱신
     setInterval(fetchAndRenderPicks, REFRESH_MS);
@@ -149,6 +194,7 @@ async function fetchAndRenderPicks() {
                 <div class="card-top">
                     <div class="name top-name">${item.name}</div>
                     <div class="badge">${item.country}</div>
+                    <button class="fav-btn" type="button">${isFavorite(item.ticker) ? '★' : '☆'}</button>
                 </div>
                 <div class="ticker subtle-ticker">${item.ticker}</div>
                 <div class="price-block">
@@ -162,6 +208,15 @@ async function fetchAndRenderPicks() {
                 <div class="score">Score ${item.score}</div>
             `;
             target.appendChild(card);
+            const favBtn = card.querySelector('.fav-btn');
+            if (favBtn) {
+                favBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    toggleFavorite(item.ticker);
+                    const on = isFavorite(item.ticker);
+                    favBtn.textContent = on ? '★' : '☆';
+                });
+            }
         };
 
         enriched
@@ -181,6 +236,63 @@ async function fetchAndRenderPicks() {
         if (etfPicksContainer) etfPicksContainer.innerHTML = '';
     } finally {
         loadingElement.style.display = 'none';
+    }
+}
+
+async function renderFavorites() {
+    const box = document.getElementById('favorites-list');
+    if (!box) return;
+    const favs = loadFavorites();
+    if (!favs.length) {
+        box.innerHTML = '<p class="muted">즐겨찾기한 종목이 없습니다.</p>';
+        return;
+    }
+    box.innerHTML = '<div class="snapshot-skeleton"></div>';
+    try {
+        const results = await Promise.all(
+            favs.map(async (ticker) => {
+                const res = await fetch(`${API_BASE_URL}/recommendation/${encodeURIComponent(ticker)}`);
+                if (!res.ok) throw new Error(res.status);
+                return await res.json();
+            })
+        );
+        box.innerHTML = '';
+        results.forEach((item) => {
+            const currency = item.currency || 'USD';
+            const formattedPrice = formatPrice(item.current_price, currency);
+            const action = item.recommendation?.action || 'HOLD';
+            const card = document.createElement('div');
+            card.className = 'stock-card';
+            card.setAttribute(
+                'onclick',
+                `location.href='detail.html?ticker=${encodeURIComponent(item.ticker)}'`
+            );
+            card.innerHTML = `
+                <div class="card-top">
+                    <div class="name top-name">${item.name}</div>
+                    <div class="badge">${item.country}</div>
+                    <button class="fav-btn" type="button">${isFavorite(item.ticker) ? '★' : '☆'}</button>
+                </div>
+                <div class="ticker subtle-ticker">${item.ticker}</div>
+                <div class="price-block">
+                    <div class="price">${formattedPrice}</div>
+                    <div class="action ${action.toLowerCase()}">${action}</div>
+                </div>
+            `;
+            box.appendChild(card);
+            const favBtn = card.querySelector('.fav-btn');
+            if (favBtn) {
+                favBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    toggleFavorite(item.ticker);
+                    const on = isFavorite(item.ticker);
+                    favBtn.textContent = on ? '★' : '☆';
+                });
+            }
+        });
+    } catch (err) {
+        console.error('favorites render error', err);
+        box.innerHTML = '<p class="snapshot-error">즐겨찾기 목록을 불러오지 못했습니다.</p>';
     }
 }
 

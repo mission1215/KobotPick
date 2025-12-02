@@ -5,6 +5,8 @@ const API_BASE_URL =
   (window.KOBOT_API_BASE_URL?.replace(/\/+$/, "")) ||
   "http://127.0.0.1:8000/api/v1";
 
+const FAVORITES_KEY = "kobot-favorites";
+
 const TEXT = {
     ko: {
         newsEmpty: "관련 뉴스를 불러올 수 없습니다.",
@@ -25,6 +27,38 @@ const TEXT = {
 };
 
 let currentLang = localStorage.getItem("kobot-lang") || "ko";
+
+function loadFavorites() {
+    try {
+        const raw = localStorage.getItem(FAVORITES_KEY);
+        return raw ? JSON.parse(raw) : [];
+    } catch {
+        return [];
+    }
+}
+
+function saveFavorites(list) {
+    localStorage.setItem(FAVORITES_KEY, JSON.stringify(list));
+}
+
+function isFavorite(ticker) {
+    return loadFavorites().includes(ticker);
+}
+
+function toggleFavorite(ticker, btn) {
+    const list = loadFavorites();
+    const idx = list.indexOf(ticker);
+    if (idx >= 0) {
+        list.splice(idx, 1);
+    } else {
+        list.push(ticker);
+    }
+    saveFavorites(list);
+    if (btn) {
+        const on = isFavorite(ticker);
+        btn.textContent = on ? "★ 즐겨찾기" : "☆ 즐겨찾기";
+    }
+}
 
 document.addEventListener("DOMContentLoaded", () => {
     const langSelect = document.getElementById("lang-select-detail");
@@ -93,6 +127,15 @@ async function fetchStockData() {
 function renderData(data) {
     document.getElementById("company-name").innerText = data.name;
     document.getElementById("ticker-pill").innerText = data.ticker;
+    const favBtn = document.getElementById("fav-toggle");
+    if (favBtn) {
+        const on = isFavorite(data.ticker);
+        favBtn.textContent = on ? "★ 즐겨찾기" : "☆ 즐겨찾기";
+        favBtn.onclick = (e) => {
+            e.preventDefault();
+            toggleFavorite(data.ticker, favBtn);
+        };
+    }
 
     const friendlyDate = formatDateFriendly(data.last_updated);
     const currency = data.currency || "USD";
