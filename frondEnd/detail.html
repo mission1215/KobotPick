@@ -94,6 +94,30 @@
     <p class="disclaimer">이 정보는 AI 알고리즘에 의한 참고용이며, 모든 투자 결정 및 책임은 사용자 본인에게 있습니다.</p>
 </div>
 
+<!-- Firebase Analytics: index와 동일하게 적용 -->
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+    import { getAnalytics, logEvent } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-analytics.js";
+
+    const firebaseConfig = {
+        apiKey: "AIzaSyC9sChjp1QM263w9Guv76DvJ8lptRgG3rA",
+        authDomain: "kobotpick.firebaseapp.com",
+        projectId: "kobotpick",
+        storageBucket: "kobotpick.firebasestorage.app",
+        messagingSenderId: "194944764478",
+        appId: "1:194944764478:web:d875664bc7670a99a9df6f",
+        measurementId: "G-BTLSBL36Y3",
+    };
+
+    try {
+        const app = initializeApp(firebaseConfig);
+        const analytics = getAnalytics(app);
+        logEvent(analytics, "page_view");
+    } catch (err) {
+        console.error("Firebase init failed:", err);
+    }
+</script>
+
 <script src="js/chart_renderer.js"></script>
 <script src="js/stock_detail.js"></script>
 </body>
