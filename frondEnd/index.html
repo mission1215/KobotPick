@@ -4,9 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Kobot Pick 대시보드</title>
+
+    <!-- ✅ 백엔드 API 베이스 URL (배포용) -->
     <script>
         window.KOBOT_API_BASE_URL = "https://kobotpick.onrender.com/api/v1/";
+        // ✅ 페이지 로딩 시 Render 백엔드를 먼저 깨워서 콜드 스타트 지연을 줄임
+        fetch("https://kobotpick.onrender.com/warmup").catch(() => {});
     </script>
+
     <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
@@ -51,7 +56,9 @@
     <div id="etf-picks" class="card-container"></div>
 </section>
 
-<p class="disclaimer" id="disclaimer">이 정보는 AI 알고리즘에 의한 참고용이며, 투자 결정 및 책임은 본인에게 있습니다.</p>
+<p class="disclaimer" id="disclaimer">
+    이 정보는 AI 알고리즘에 의한 참고용이며, 투자 결정 및 책임은 본인에게 있습니다.
+</p>
 
 <script src="js/main_dashboard.js"></script>
 </body>

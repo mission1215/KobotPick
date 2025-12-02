@@ -1,22 +1,29 @@
-# kobotPick/backEnd/main.py
+# backend/main.py
 
-from typing import List
-
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-import uvicorn
-from core.kobot_engine import analyze_and_recommend, get_top_stocks, get_picks_with_recommendations
-from core.data_handler import get_market_snapshot, get_global_headlines
-from config.settings import settings
-from models.stock_model import StockRecommendation, PickItem  # Pydantic 모델 import
+
+# 🔽 네 프로젝트에 맞게 임포트 부분만 맞춰줘
+# 예시:
+# from routers.picks import router as picks_router
+# from routers.market import router as market_router
+# from routers.recommendation import router as recommendation_router
+# from routers.dashboard import router as dashboard_router
 
 app = FastAPI(
     title="Kobot Pick API",
-    description="주식 추천 Kobot 분석 백엔드 서버"
+    version="1.0.0",
 )
 
-# CORS 설정 (settings 파일에서 관리하는 것이 일반적이나, 여기서는 간단히 *로 설정 유지)
-origins = ["*"]
+# CORS 설정 (이미 있다면 중복 추가 말고 기존 것만 유지해도 됨)
+origins = [
+    "http://127.0.0.1:5500",             # 로컬 개발 (VSCode Live Server 등)
+    "http://localhost:5500",
+    "http://localhost:3000",
+    "https://kobot-pick.vercel.app",      # Vercel 프론트
+    # 필요하면 도메인 추가: "https://kobotpick.com",
+]
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
@@ -25,43 +32,27 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- API 엔드포인트 정의 ---
+# 🔽 라우터 등록 (네 프로젝트에 맞게 살려줘)
+# app.include_router(picks_router, prefix="/api/v1", tags=["picks"])
+# app.include_router(market_router, prefix="/api/v1/market", tags=["market"])
+# app.include_router(recommendation_router, prefix="/api/v1", tags=["recommendation"])
+# app.include_router(dashboard_router, prefix="/api/v1", tags=["dashboard"])
+
 
 @app.get("/")
 async def root():
-    return {"message": "Kobot Pick API is running."}
+    return {"message": "Kobot Pick API running"}
 
-@app.get(f"{settings.API_V1_STR}/recommendation/{{ticker}}", response_model=StockRecommendation)
-async def get_recommendation(ticker: str):
-    """특정 종목 티커에 대한 Kobot의 분석 결과를 반환합니다. (상세 화면용)"""
-    ticker_upper = ticker.upper()
-    result = analyze_and_recommend(ticker_upper, allow_partial=True)
 
-    if result is None:
-        raise HTTPException(status_code=404, detail=f"데이터 분석 오류 또는 종목을 찾을 수 없습니다: {ticker_upper}")
+# ✅ 여기만 실제로 새로 추가되는 엔드포인트 (Warmup용)
+@app.get("/warmup")
+async def warmup():
+    """
+    Render Free 플랜 콜드스타트 줄이기용 헬스 체크 엔드포인트.
+    매우 가벼운 연산만 수행.
+    """
+    return {"status": "awake"}
 
-    return result
 
-@app.get(f"{settings.API_V1_STR}/picks", response_model=List[PickItem])
-async def get_kobot_picks():
-    """오늘의 Kobot 추천 종목 리스트를 반환합니다. (홈 화면용)"""
-    return get_top_stocks()
-
-@app.get(f"{settings.API_V1_STR}/picks/full")
-async def get_kobot_picks_full():
-    """추천 + 상세 리코멘드 한번에 반환 (홈 화면 N+1 방지)."""
-    return get_picks_with_recommendations()
-
-@app.get(f"{settings.API_V1_STR}/market/snapshot")
-async def market_snapshot():
-    """주요 지수/환율 요약."""
-    return get_market_snapshot()
-
-@app.get(f"{settings.API_V1_STR}/market/headlines")
-async def market_headlines():
-    """글로벌 시장 뉴스 헤드라인."""
-    return get_global_headlines()
-
-# --- 서버 실행 ---
-if __name__ == "__main__":
-    uvicorn.run("main:app", host=settings.SERVER_HOST, port=settings.SERVER_PORT, reload=True)
+# Uvicorn에서 main:app 으로 실행
+# uvicorn main:app --host 0.0.0.0 --port 8000
