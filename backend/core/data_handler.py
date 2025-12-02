@@ -13,6 +13,7 @@ import time
 # ==================== 환경변수 ====================
 FINNHUB_KEY = os.getenv("FINNHUB_KEY")
 ALPHA_KEYS = [os.getenv(f"ALPHA_VANTAGE_KEY{i}") for i in range(1, 6) if os.getenv(f"ALPHA_VANTAGE_KEY{i}")]
+NO_REMOTE_DATA = not FINNHUB_KEY and not ALPHA_KEYS
 
 # ==================== 캐시 ====================
 CACHE: Dict[str, tuple] = {}
@@ -276,6 +277,8 @@ def alpha_historical(symbol: str) -> Optional[pd.DataFrame]:
 # ==================== 통합 헬퍼 ====================
 def get_current_price(ticker: str) -> Optional[dict]:
     symbol = normalize_symbol(ticker)
+    if NO_REMOTE_DATA:
+        return None
     cache_key = f"price:{symbol}"
     cached = _cache_get(cache_key)
     if cached:
@@ -299,6 +302,8 @@ def get_current_price(ticker: str) -> Optional[dict]:
 
 def get_historical_data(ticker: str, period: str = "3mo") -> Optional[pd.DataFrame]:
     symbol = normalize_symbol(ticker)
+    if NO_REMOTE_DATA:
+        return None
     df = finnhub_historical(symbol) or alpha_historical(symbol) or yahoo_history(symbol)
     return df
 

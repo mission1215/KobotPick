@@ -4,12 +4,59 @@ from typing import Dict, Any, Optional, List
 from datetime import datetime, timezone
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from .data_handler import get_historical_data, get_stock_info, get_news_items
+from .data_handler import (
+    get_historical_data,
+    get_stock_info,
+    get_news_items,
+    FINNHUB_KEY,
+    ALPHA_KEYS,
+)
 from .utils import calculate_technical_indicators
 
 # 이전에 제공된 analyze_and_recommend 함수 코드를 여기에 배치합니다.
 
+NO_REMOTE_DATA = not FINNHUB_KEY and not ALPHA_KEYS
+
 def analyze_and_recommend(ticker: str, allow_partial: bool = False, country_hint: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    if NO_REMOTE_DATA:
+        # 외부 데이터 소스가 모두 없을 때는 최소한의 더미 리포트를 즉시 반환해 API 지연을 막는다.
+        now_iso = datetime.now(timezone.utc).isoformat()
+        country, currency = detect_region_currency(ticker, None)
+        price_val = 0.0
+        return {
+            'ticker': ticker,
+            'name': ticker,
+            'current_price': price_val,
+            'last_updated': now_iso,
+            'country': country,
+            'currency': currency,
+            'fundamentals': {
+                'market_cap': None,
+                'per': None,
+                'pbr': None,
+                'roe': None,
+                'dividend_yield': None,
+                'psr': None,
+            },
+            'recommendation': {
+                'action': 'HOLD',
+                'buy_price': price_val,
+                'sell_price': price_val,
+                'stop_loss': price_val,
+                'rationale': '데이터 소스가 연결되지 않아 임시 정보를 표시합니다.',
+            },
+            'historical': [],
+            'news': [],
+            'profile': {
+                'sector': None,
+                'industry': None,
+                'website': None,
+                'summary': None,
+                'employees': None,
+                'exchange': None,
+                'currency': currency,
+            }
+        }
     # 캐시 체크
     now = time.time()
     cached = REC_CACHE.get(ticker)
@@ -193,6 +240,28 @@ def compute_score(latest_row: Any, info: Dict[str, Any]) -> int:
 
 def get_top_stocks() -> List[Dict[str, str]]:
     """해외 5, 국내 5, ETF 5 종목을 실데이터 기반으로 스코어링해 반환."""
+    if NO_REMOTE_DATA:
+        # 데이터 소스가 없으면 빠른 응답을 위해 기본 리스트만 돌려준다.
+        fallback = [
+            {"ticker": "AAPL", "name": "Apple Inc.", "country": "US", "score": 50},
+            {"ticker": "TSLA", "name": "Tesla, Inc.", "country": "US", "score": 50},
+            {"ticker": "NVDA", "name": "NVIDIA Corp.", "country": "US", "score": 50},
+            {"ticker": "MSFT", "name": "Microsoft Corp.", "country": "US", "score": 50},
+            {"ticker": "AMZN", "name": "Amazon.com, Inc.", "country": "US", "score": 50},
+            {"ticker": "005930.KS", "name": "Samsung Electronics", "country": "KR", "score": 50},
+            {"ticker": "000660.KS", "name": "SK hynix", "country": "KR", "score": 50},
+            {"ticker": "035420.KS", "name": "NAVER Corp.", "country": "KR", "score": 50},
+            {"ticker": "051910.KS", "name": "LG Chem", "country": "KR", "score": 50},
+            {"ticker": "207940.KS", "name": "Samsung Biologics", "country": "KR", "score": 50},
+            {"ticker": "SPY", "name": "SPDR S&P 500 ETF", "country": "ETF", "score": 50},
+            {"ticker": "QQQ", "name": "Invesco QQQ Trust", "country": "ETF", "score": 50},
+            {"ticker": "VTI", "name": "Vanguard Total Stock Market ETF", "country": "ETF", "score": 50},
+            {"ticker": "IWM", "name": "iShares Russell 2000 ETF", "country": "ETF", "score": 50},
+            {"ticker": "ARKK", "name": "ARK Innovation ETF", "country": "ETF", "score": 50},
+        ]
+        PICKS_CACHE["data"] = fallback
+        PICKS_CACHE["ts"] = time.time()
+        return fallback
     now = time.time()
     if PICKS_CACHE["data"] and (now - PICKS_CACHE["ts"] < PICKS_CACHE_TTL_SECONDS):
         return PICKS_CACHE["data"]
@@ -248,6 +317,33 @@ def get_top_stocks() -> List[Dict[str, str]]:
 def get_picks_with_recommendations() -> List[Dict[str, Any]]:
     """picks + recommendation을 한번에 반환 (병렬 처리, 캐시 활용)."""
     picks = get_top_stocks()
+    if NO_REMOTE_DATA:
+        # 데이터 소스가 없을 때는 빠르게 더미 rec를 붙여 반환
+        now_iso = datetime.now(timezone.utc).isoformat()
+        results = []
+        for p in picks:
+            country, currency = detect_region_currency(p["ticker"], None)
+            rec = {
+                "ticker": p["ticker"],
+                "name": p["name"],
+                "current_price": 0.0,
+                "last_updated": now_iso,
+                "country": country,
+                "currency": currency,
+                "fundamentals": {},
+                "recommendation": {
+                    "action": "HOLD",
+                    "buy_price": 0.0,
+                    "sell_price": 0.0,
+                    "stop_loss": 0.0,
+                    "rationale": "데이터 소스가 연결되지 않아 임시 정보를 표시합니다.",
+                },
+                "historical": [],
+                "news": [],
+                "profile": {},
+            }
+            results.append({**p, "rec": rec})
+        return results
     results: List[Dict[str, Any]] = []
     with ThreadPoolExecutor(max_workers=8) as executor:
         future_map = {executor.submit(analyze_and_recommend, p["ticker"], True, p.get("country")): p for p in picks}
