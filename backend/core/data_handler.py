@@ -50,7 +50,7 @@ def yahoo_quote(symbol: str) -> Optional[dict]:
         r = requests.get(
             "https://query1.finance.yahoo.com/v7/finance/quote",
             params={"symbols": symbol},
-            timeout=8,
+            timeout=6,
         )
         if r.status_code != 200:
             return None
@@ -90,7 +90,7 @@ def yahoo_history(symbol: str, range_str: str = "6mo") -> Optional[pd.DataFrame]
         r = requests.get(
             f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}",
             params={"range": range_str, "interval": "1d", "events": "div,split"},
-            timeout=12,
+            timeout=8,
         )
         if r.status_code != 200:
             return None
@@ -127,7 +127,7 @@ def yahoo_profile(symbol: str) -> Dict[str, Any]:
         r = requests.get(
             f"https://query1.finance.yahoo.com/v10/finance/quoteSummary/{symbol}",
             params={"modules": "assetProfile"},
-            timeout=8,
+            timeout=6,
         )
         if r.status_code != 200:
             return {}
@@ -152,7 +152,7 @@ def finnhub_quote(symbol: str) -> Optional[dict]:
         r = requests.get(
             "https://finnhub.io/api/v1/quote",
             params={"symbol": symbol, "token": FINNHUB_KEY},
-            timeout=8,
+            timeout=4,
         )
         if r.status_code == 200:
             data = r.json()
@@ -173,7 +173,7 @@ def finnhub_historical(symbol: str) -> Optional[pd.DataFrame]:
             "to": int(datetime.now().timestamp()),
             "token": FINNHUB_KEY,
         }
-        data = requests.get("https://finnhub.io/api/v1/stock/candle", params=params, timeout=10).json()
+        data = requests.get("https://finnhub.io/api/v1/stock/candle", params=params, timeout=6).json()
         if data.get("s") == "ok":
             df = pd.DataFrame(
                 {
@@ -197,7 +197,7 @@ def finnhub_profile(symbol: str) -> Dict[str, Any]:
         r = requests.get(
             "https://finnhub.io/api/v1/stock/profile2",
             params={"symbol": symbol, "token": FINNHUB_KEY},
-            timeout=8,
+            timeout=5,
         )
         if r.status_code == 200:
             return r.json()
@@ -215,7 +215,7 @@ def finnhub_company_news(symbol: str, days: int = 7) -> List[Dict[str, Any]]:
         r = requests.get(
             "https://finnhub.io/api/v1/company-news",
             params={"symbol": symbol, "from": frm, "to": to, "token": FINNHUB_KEY},
-            timeout=8,
+            timeout=6,
         )
         if r.status_code == 200:
             return r.json()
@@ -232,7 +232,7 @@ def alpha_quote(symbol: str) -> Optional[dict]:
             r = requests.get(
                 "https://www.alphavantage.co/query",
                 params={"function": "GLOBAL_QUOTE", "symbol": symbol, "apikey": key},
-                timeout=10,
+                timeout=6,
             )
             if r.status_code == 200:
                 data = r.json().get("Global Quote", {})
@@ -252,7 +252,7 @@ def alpha_historical(symbol: str) -> Optional[pd.DataFrame]:
             r = requests.get(
                 "https://www.alphavantage.co/query",
                 params={"function": "TIME_SERIES_DAILY", "symbol": symbol, "outputsize": "compact", "apikey": key},
-                timeout=15,
+                timeout=8,
             )
             data = r.json()
             ts = data.get("Time Series (Daily)")
@@ -386,10 +386,25 @@ def get_market_snapshot() -> Dict[str, Any]:
         "USDKRW": "USD/KRW",
     }
     result = {}
+    start = time.time()
     for name, sym in indices.items():
-        data = _calc_change(sym)
+        if time.time() - start > 6:
+            # 오래 걸리면 남은 지표는 건너뛰고 빠르게 반환
+            break
+        try:
+            data = _calc_change(sym)
+        except Exception:
+            data = None
         if data:
             result[name] = data
+    if not result:
+        # 모든 소스 실패 시 최소 더미 값을 반환해 프론트에서 에러를 띄우지 않도록 한다.
+        result = {
+            "SPX": {"price": 0.0, "change": 0.0, "change_pct": 0.0},
+            "NASDAQ": {"price": 0.0, "change": 0.0, "change_pct": 0.0},
+            "KOSPI": {"price": 0.0, "change": 0.0, "change_pct": 0.0},
+            "USDKRW": {"price": 0.0, "change": 0.0, "change_pct": 0.0},
+        }
     return result
 
 def get_global_headlines(limit: int = 6) -> List[Dict[str, Any]]:
