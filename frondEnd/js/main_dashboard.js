@@ -8,8 +8,10 @@ const API_BASE_URL = (
 
 const REFRESH_MS = 60000; // 1분마다 새로고침 (유사 실시간)
 const REQUEST_TIMEOUT_MS = 20000; // API 최대 대기 20초
+const PICKS_TIMEOUT_MS = 45000; // 추천 목록 로딩은 여유 있게 대기
 const FAVORITES_KEY = 'kobot-favorites';
 let lastPicks = [];
+let lastRenderedPicks = [];
 // 검색 보조용 이름/티커 매핑 (공백/구두점 제거 후 비교)
 const NAME_TICKER_MAP = {
     APPLE: 'AAPL',
@@ -193,9 +195,7 @@ async function fetchAndRenderPicks() {
     showSkeleton(krPicksContainer, 5);
     if (etfPicksContainer) showSkeleton(etfPicksContainer, 5);
 
-    try {
-        const enriched = await getPicksWithRecommendations();
-
+    const renderSections = (items) => {
         // 섹션 클리어
         usPicksContainer.innerHTML = '';
         krPicksContainer.innerHTML = '';
@@ -248,33 +248,46 @@ async function fetchAndRenderPicks() {
             }
         };
 
-        enriched
+        items
             .filter((p) => p.country === 'US')
             .forEach((p) => renderCard(usPicksContainer, p));
-        enriched
+        items
             .filter((p) => p.country === 'KR')
             .forEach((p) => renderCard(krPicksContainer, p));
-        enriched
+        items
             .filter((p) => p.country === 'ETF')
             .forEach((p) => etfPicksContainer && renderCard(etfPicksContainer, p));
+    };
+
+    try {
+        const enriched = await getPicksWithRecommendations(PICKS_TIMEOUT_MS);
+        lastRenderedPicks = enriched;
+        renderSections(enriched);
     } catch (error) {
         console.error('Error fetching picks:', error);
-        const msg =
-            error.name === 'AbortError'
-                ? '추천 목록 로드가 지연되어 중단되었습니다. 잠시 후 다시 시도해 주세요.'
-                : `추천 목록 로드 실패: ${error.message}`;
-        usPicksContainer.innerHTML = `<p style="color:red; text-align: center;">${msg}</p>`;
-        krPicksContainer.innerHTML = '';
-        if (etfPicksContainer) etfPicksContainer.innerHTML = '';
+        if (error.name === 'AbortError' && lastRenderedPicks.length) {
+            // 네트워크 지연 시 직전 성공 데이터를 보여준다.
+            renderSections(lastRenderedPicks);
+        } else {
+            const msg =
+                error.name === 'AbortError'
+                    ? '추천 목록 로드가 지연되어 중단되었습니다. 잠시 후 다시 시도해 주세요.'
+                    : `추천 목록 로드 실패: ${error.message}`;
+            usPicksContainer.innerHTML = `<p style="color:red; text-align: center;">${msg}</p>`;
+            krPicksContainer.innerHTML = '';
+            if (etfPicksContainer) etfPicksContainer.innerHTML = '';
+        }
     } finally {
         loadingElement.style.display = 'none';
     }
 }
 
 // picks/full 우선 사용해 API 호출 수를 줄이고, 실패 시 기존 방식으로 폴백
-async function getPicksWithRecommendations() {
+async function getPicksWithRecommendations(timeoutMs = REQUEST_TIMEOUT_MS) {
     try {
-        const resFull = await fetchWithTimeout(`${API_BASE_URL}/picks/full`);
+        const resFull = await fetchWithTimeout(`${API_BASE_URL}/picks/full`, {
+            timeout: timeoutMs,
+        });
         if (resFull.ok) {
             const data = await resFull.json();
             if (Array.isArray(data) && data.length && data[0].rec) {
@@ -287,7 +300,7 @@ async function getPicksWithRecommendations() {
     }
 
     // 기존 방식 폴백: picks 후 개별 recommendation 병렬 호출
-    const response = await fetchWithTimeout(`${API_BASE_URL}/picks`);
+    const response = await fetchWithTimeout(`${API_BASE_URL}/picks`, { timeout: timeoutMs });
     if (!response.ok) throw new Error('Failed to fetch Kobot Picks');
     const picks = await response.json();
     lastPicks = picks || [];
@@ -296,7 +309,8 @@ async function getPicksWithRecommendations() {
         picks.map(async (pick) => {
             try {
                 const recRes = await fetchWithTimeout(
-                    `${API_BASE_URL}/recommendation/${encodeURIComponent(pick.ticker)}`
+                    `${API_BASE_URL}/recommendation/${encodeURIComponent(pick.ticker)}`,
+                    { timeout: timeoutMs }
                 );
                 if (!recRes.ok) {
                     throw new Error(`recommendation error: ${recRes.status}`);
