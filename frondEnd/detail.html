@@ -12,18 +12,9 @@
     </script>
 
     <!-- Google AdSense -->
+    <!-- Google AdSense: 상세 페이지에서는 auto ads를 비활성화해 중복 호출을 방지 -->
     <meta name="google-adsense-account" content="pub-7730946066495644">
     <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=pub-7730946066495644" crossorigin="anonymous"></script>
-    <script>
-        // 중복 호출 방지
-        if (!window.__kobot_auto_ads_initialized) {
-            (adsbygoogle = window.adsbygoogle || []).push({
-                google_ad_client: "pub-7730946066495644",
-                enable_page_level_ads: true
-            });
-            window.__kobot_auto_ads_initialized = true;
-        }
-    </script>
 
     <script>
         window.KOBOT_API_BASE_URL = "https://kobotpick.onrender.com/api/v1/";

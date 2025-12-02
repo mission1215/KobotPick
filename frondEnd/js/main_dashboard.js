@@ -7,6 +7,7 @@ const API_BASE_URL = (
 ).replace(/\/+$/, ""); 
 
 const REFRESH_MS = 60000; // 1분마다 새로고침 (유사 실시간)
+const REQUEST_TIMEOUT_MS = 20000; // API 최대 대기 20초
 const FAVORITES_KEY = 'kobot-favorites';
 let lastPicks = [];
 // 검색 보조용 이름/티커 매핑 (공백/구두점 제거 후 비교)
@@ -166,7 +167,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // fetch에 타임아웃을 걸어 API 지연 시 무한 대기하지 않도록 함
-async function fetchWithTimeout(url, { timeout = 12000, ...options } = {}) {
+async function fetchWithTimeout(url, { timeout = REQUEST_TIMEOUT_MS, ...options } = {}) {
     const controller = new AbortController();
     const id = setTimeout(() => controller.abort(), timeout);
     try {
