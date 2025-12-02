@@ -3,13 +3,27 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="google-adsense-account" content="pub-7730946066495644">
     <title>Kobot Pick 상세 분석</title>
+
+    <!-- PropellerAds -->
+    <script src="https://www.profitabledisplaynetwork.com/8c9c68c7f6d7e7b5f4d3c2b1a0.js" async></script>
+    <script>
+        (adsbypropeller = window.adsbypropeller || []).push({});
+    </script>
+
+    <!-- Google AdSense -->
+    <meta name="google-adsense-account" content="pub-7730946066495644">
+    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=pub-7730946066495644" crossorigin="anonymous"></script>
+    <script>
+        (adsbygoogle = window.adsbygoogle || []).push({
+            google_ad_client: "pub-7730946066495644",
+            enable_page_level_ads: true
+        });
+    </script>
+
     <script>
         window.KOBOT_API_BASE_URL = "https://kobotpick.onrender.com/api/v1/";
     </script>
-    <!-- Google AdSense auto ads -->
-    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=pub-7730946066495644" crossorigin="anonymous"></script>
     <link rel="stylesheet" href="css/styles.css">
     <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
@@ -48,7 +62,7 @@
         <div class="company-title">
             <div id="company-name" class="company-name"></div>
             <div id="ticker-pill" class="ticker-pill"></div>
-            <button id="fav-toggle" class="fav-btn" type="button">☆ 즐겨찾기</button>
+            <button id="fav-toggle" class="fav-btn" type="button">즐겨찾기</button>
         </div>
         <p id="current-price"></p>
         <select id="lang-select-detail" class="lang-select">
@@ -98,7 +112,7 @@
     <p class="disclaimer">이 정보는 AI 알고리즘에 의한 참고용이며, 모든 투자 결정 및 책임은 사용자 본인에게 있습니다.</p>
 </div>
 
-<!-- Firebase Analytics: index와 동일하게 적용 -->
+<!-- Firebase Analytics -->
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
     import { getAnalytics, logEvent } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-analytics.js";

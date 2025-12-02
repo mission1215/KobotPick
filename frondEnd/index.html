@@ -6,14 +6,28 @@
     <meta name="google-adsense-account" content="pub-7730946066495644">
     <title>Kobot Pick 대시보드</title>
 
-    <!-- ✅ 백엔드 API 베이스 URL (배포용) -->
+    <!-- PropellerAds (한국 트래픽 수익 1위) -->
+    <script src="https://www.profitabledisplaynetwork.com/8c9c68c7f6d7e7b5f4d3c2b1a0.js" async></script>
+    <script>
+        (adsbypropeller = window.adsbypropeller || []).push({});
+    </script>
+
+    <!-- Google AdSense 자동 광고 -->
+    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=pub-7730946066495644" crossorigin="anonymous"></script>
+    <script>
+        (adsbygoogle = window.adsbygoogle || []).push({
+            google_ad_client: "pub-7730946066495644",
+            enable_page_level_ads: true,
+            overlays: {bottom: true}
+        });
+    </script>
+
+    <!-- 백엔드 API 베이스 URL (배포용) -->
     <script>
         window.KOBOT_API_BASE_URL = "https://kobotpick.onrender.com/api/v1/";
-        // ✅ 페이지 로딩 시 Render 백엔드를 먼저 깨워서 콜드 스타트 지연을 줄임
+        // 페이지 로딩 시 Render 백엔드를 먼저 깨워서 콜드 스타트 지연을 줄임
         fetch("https://kobotpick.onrender.com/warmup").catch(() => {});
     </script>
-    <!-- Google AdSense auto ads -->
-    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=pub-7730946066495644" crossorigin="anonymous"></script>
 
     <link rel="stylesheet" href="css/styles.css">
 </head>
@@ -59,17 +73,17 @@
 
 <section class="section">
     <div id="market-snapshot" class="market-snapshot"></div>
-    <div class="section-title" id="section-us">🇺🇸 해외 추천 Top 5</div>
+    <div class="section-title" id="section-us">해외 추천 Top 5</div>
     <div id="us-picks" class="card-container"></div>
 </section>
 
 <section class="section">
-    <div class="section-title" id="section-kr">🇰🇷 국내 추천 Top 5</div>
+    <div class="section-title" id="section-kr">국내 추천 Top 5</div>
     <div id="kr-picks" class="card-container"></div>
 </section>
 
 <section class="section">
-    <div class="section-title" id="section-etf">📊 ETF 추천 Top 5</div>
+    <div class="section-title" id="section-etf">ETF 추천 Top 5</div>
     <div id="etf-picks" class="card-container"></div>
 </section>
 
@@ -77,7 +91,7 @@
     이 정보는 AI 알고리즘에 의한 참고용이며, 투자 결정 및 책임은 본인에게 있습니다.
 </p>
 
-<!-- Firebase Analytics: 아래 firebaseConfig에 실제 프로젝트 값 채워주세요 -->
+<!-- Firebase Analytics -->
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
     import { getAnalytics, logEvent } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-analytics.js";
