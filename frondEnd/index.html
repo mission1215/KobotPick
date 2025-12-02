@@ -15,11 +15,15 @@
     <!-- Google AdSense 자동 광고 -->
     <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=pub-7730946066495644" crossorigin="anonymous"></script>
     <script>
-        (adsbygoogle = window.adsbygoogle || []).push({
-            google_ad_client: "pub-7730946066495644",
-            enable_page_level_ads: true,
-            overlays: {bottom: true}
-        });
+        // auto ads는 페이지당 1회만 enable_page_level_ads를 호출해야 함
+        if (!window.__kobot_auto_ads_initialized) {
+            (adsbygoogle = window.adsbygoogle || []).push({
+                google_ad_client: "pub-7730946066495644",
+                enable_page_level_ads: true,
+                overlays: {bottom: true}
+            });
+            window.__kobot_auto_ads_initialized = true;
+        }
     </script>
 
     <!-- 백엔드 API 베이스 URL (배포용) -->

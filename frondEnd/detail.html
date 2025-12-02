@@ -15,10 +15,14 @@
     <meta name="google-adsense-account" content="pub-7730946066495644">
     <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=pub-7730946066495644" crossorigin="anonymous"></script>
     <script>
-        (adsbygoogle = window.adsbygoogle || []).push({
-            google_ad_client: "pub-7730946066495644",
-            enable_page_level_ads: true
-        });
+        // 중복 호출 방지
+        if (!window.__kobot_auto_ads_initialized) {
+            (adsbygoogle = window.adsbygoogle || []).push({
+                google_ad_client: "pub-7730946066495644",
+                enable_page_level_ads: true
+            });
+            window.__kobot_auto_ads_initialized = true;
+        }
     </script>
 
     <script>
