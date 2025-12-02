@@ -8,10 +8,34 @@ const API_BASE_URL = (
 
 const REFRESH_MS = 60000; // 1분마다 새로고침 (유사 실시간)
 const REQUEST_TIMEOUT_MS = 20000; // API 최대 대기 20초
-const PICKS_TIMEOUT_MS = 45000; // 추천 목록 로딩은 여유 있게 대기
+const PICKS_TIMEOUT_MS = 12000; // 추천 목록 로딩은 빠르게 타임아웃 후 폴백
 const FAVORITES_KEY = 'kobot-favorites';
 let lastPicks = [];
 let lastRenderedPicks = [];
+const FALLBACK_PICKS = [
+    { ticker: 'AAPL', name: 'Apple Inc.', country: 'US', score: 50 },
+    { ticker: 'TSLA', name: 'Tesla, Inc.', country: 'US', score: 50 },
+    { ticker: 'NVDA', name: 'NVIDIA Corp.', country: 'US', score: 50 },
+    { ticker: 'MSFT', name: 'Microsoft Corp.', country: 'US', score: 50 },
+    { ticker: 'AMZN', name: 'Amazon.com, Inc.', country: 'US', score: 50 },
+    { ticker: '005930.KS', name: 'Samsung Electronics', country: 'KR', score: 50 },
+    { ticker: '000660.KS', name: 'SK hynix', country: 'KR', score: 50 },
+    { ticker: '035420.KS', name: 'NAVER Corp.', country: 'KR', score: 50 },
+    { ticker: '051910.KS', name: 'LG Chem', country: 'KR', score: 50 },
+    { ticker: '207940.KS', name: 'Samsung Biologics', country: 'KR', score: 50 },
+    { ticker: 'SPY', name: 'SPDR S&P 500 ETF', country: 'ETF', score: 50 },
+    { ticker: 'QQQ', name: 'Invesco QQQ Trust', country: 'ETF', score: 50 },
+    { ticker: 'VTI', name: 'Vanguard Total Stock Market ETF', country: 'ETF', score: 50 },
+    { ticker: 'IWM', name: 'iShares Russell 2000 ETF', country: 'ETF', score: 50 },
+    { ticker: 'ARKK', name: 'ARK Innovation ETF', country: 'ETF', score: 50 },
+].map((p) => ({
+    ...p,
+    rec: {
+        current_price: 0,
+        currency: p.country === 'KR' ? 'KRW' : 'USD',
+        recommendation: { action: 'HOLD', buy_price: 0, sell_price: 0 },
+    },
+}));
 // 검색 보조용 이름/티커 매핑 (공백/구두점 제거 후 비교)
 const NAME_TICKER_MAP = {
     APPLE: 'AAPL',
@@ -272,10 +296,12 @@ async function fetchAndRenderPicks() {
             const msg =
                 error.name === 'AbortError'
                     ? '추천 목록 로드가 지연되어 중단되었습니다. 잠시 후 다시 시도해 주세요.'
-                    : `추천 목록 로드 실패: ${error.message}`;
+                    : `추천 목록 로드 실패: ${error.message || '네트워크 오류'}`;
             usPicksContainer.innerHTML = `<p style="color:red; text-align: center;">${msg}</p>`;
             krPicksContainer.innerHTML = '';
             if (etfPicksContainer) etfPicksContainer.innerHTML = '';
+            // API 실패 시에도 기본 리스트를 보여준다.
+            renderSections(FALLBACK_PICKS);
         }
     } finally {
         loadingElement.style.display = 'none';
