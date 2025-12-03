@@ -243,8 +243,16 @@ function renderHeadlines(items) {
     return;
   }
   track.innerHTML = items
-    .map((n) => `<a class="headline-item" href="${n.link}" target="_blank" rel="noopener noreferrer">${n.title}</a>`)
-    .join("<span class=\"headline-sep\">•</span>");
+    .map(
+      (n, idx) => `
+        <a class="headline-card" href="${n.link}" target="_blank" rel="noopener noreferrer">
+          <div class="headline-chip">N${idx + 1}</div>
+          <div class="headline-title">${n.title}</div>
+          <div class="headline-meta">${n.publisher || "Top News"}</div>
+        </a>
+      `
+    )
+    .join("");
 }
 
 function formatPrice(val, currency = "USD") {
