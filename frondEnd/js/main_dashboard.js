@@ -1,86 +1,146 @@
-// public/js/main_dashboard.js  ← 이 파일만 교체하면 끝!
+// frontEnd/js/main_dashboard.js
 
-const API_BASE = "https://kobotpick.onrender.com/api/v1";
+// 기본 API 엔드포인트 (커스터마이징 가능)
+const API_BASE_URL = (window.KOBOT_API_BASE_URL || "https://kobotpick.onrender.com/api/v1").replace(/\/+$/, "");
 
-async function wakeUp() {
-    for (let i = 0; i < 5; i++) {
-        try {
-            await fetch("https://kobotpick.onrender.com/warmup", { cache: "no-store" });
-            console.log("서버 깨움 성공");
-            return;
-        } catch {
-            await new Promise(r => setTimeout(r, 3000));
-        }
-    }
-}
+const REQUEST_TIMEOUT_MS = 20000;
+const PICKS_REFRESH_MS = 60000;
 
-async function fetchPicks() {
-    const loading = document.getElementById('loading');
-    loading.innerHTML = "실시간 데이터 불러오는 중... (최대 30초)";
+// 기본 표시용 목록 (API 실패 시)
+const FALLBACK_PICKS = [
+  { ticker: "AAPL", name: "Apple Inc.", country: "US", score: 50 },
+  { ticker: "TSLA", name: "Tesla, Inc.", country: "US", score: 50 },
+  { ticker: "NVDA", name: "NVIDIA Corp.", country: "US", score: 50 },
+  { ticker: "MSFT", name: "Microsoft Corp.", country: "US", score: 50 },
+  { ticker: "AMZN", name: "Amazon.com, Inc.", country: "US", score: 50 },
+  { ticker: "005930.KS", name: "Samsung Electronics", country: "KR", score: 50 },
+  { ticker: "000660.KS", name: "SK hynix", country: "KR", score: 50 },
+  { ticker: "035420.KS", name: "NAVER Corp.", country: "KR", score: 50 },
+  { ticker: "051910.KS", name: "LG Chem", country: "KR", score: 50 },
+  { ticker: "207940.KS", name: "Samsung Biologics", country: "KR", score: 50 },
+  { ticker: "SPY", name: "SPDR S&P 500 ETF", country: "ETF", score: 50 },
+  { ticker: "QQQ", name: "Invesco QQQ Trust", country: "ETF", score: 50 },
+  { ticker: "VTI", name: "Vanguard Total Stock Market ETF", country: "ETF", score: 50 },
+  { ticker: "IWM", name: "iShares Russell 2000 ETF", country: "ETF", score: 50 },
+  { ticker: "ARKK", name: "ARK Innovation ETF", country: "ETF", score: 50 },
+];
 
-    for (let i = 0; i < 6; i++) {
-        try {
-            const res = await fetch(`${API_BASE}/picks`, { cache: "no-store" });
-            if (res.ok) {
-                const data = await res.json();
-                // 점수 평균이 65 이상이면 진짜 데이터로 판단
-                const avgScore = data.reduce((a, b) => a + b.score, 0) / data.length;
-                if (data.length > 0 && avgScore > 65) {
-                    renderPicks(data);
-                    loading.style.display = "none";
-                    return;
-                }
-            }
-        } catch (e) {
-            console.log("시도 중...", e);
-        }
-        loading.innerHTML = `실시간 데이터 로딩... (${(i+1)*5}초 경과)`;
-        await new Promise(r => setTimeout(r, 5000));
-    }
-
-    // 그래도 실패하면 최소한 보기 좋게
-    loading.innerHTML = "서버가 느려 기본 데이터를 보여드려요<br>새로고침(F5) 해보세요";
-    renderFallback();
-}
-
-function renderPicks(data) {
-    ["us-picks", "kr-picks", "etf-picks"].forEach(id => {
-        const container = document.getElementById(id);
-        container.innerHTML = "";
-        data.filter(p => 
-            (id === "us-picks" && !p.ticker.includes(".KS") && p.country !== "ETF") ||
-            (id === "kr-picks" && p.ticker.includes(".KS")) ||
-            (id === "etf-picks" && p.country === "ETF")
-        ).slice(0, 5).forEach(p => {
-            const card = document.createElement("div");
-            card.className = "stock-card";
-            card.innerHTML = `
-                <div class="card-header">
-                    <div class="ticker">${p.ticker}</div>
-                    <div class="score-badge">${p.score}</div>
-                </div>
-                <div class="company-name">${p.name || p.ticker}</div>
-            `;
-            card.onclick = () => location.href = `/detail.html?ticker=${p.ticker}`;
-            container.appendChild(card);
-        });
-    });
-}
-
-function renderFallback() {
-    const fallback = [
-        {ticker:"NVDA",name:"NVIDIA",score:88,country:"US"},
-        {ticker:"TSLA",name:"Tesla",score:83,country:"US"},
-        {ticker:"005930.KS",name:"삼성전자",score:86,country:"KR"},
-        {ticker:"000660.KS",name:"SK하이닉스",score:84,country:"KR"},
-        {ticker:"QQQ",name:"Invesco QQQ",score:81,country:"ETF"},
-    ];
-    renderPicks(fallback);
-}
-
-// 페이지 로드 시 바로 실행
-document.addEventListener("DOMContentLoaded", async () => {
-    wakeUp();
-    fetchPicks();
-    setInterval(fetchPicks, 300000); // 5분마다 갱신
+document.addEventListener("DOMContentLoaded", () => {
+  wakeUpServer();
+  loadDashboard();
+  setInterval(loadDashboard, PICKS_REFRESH_MS);
 });
+
+async function wakeUpServer() {
+  try {
+    await fetch(`${API_BASE_URL}/market/snapshot`, { cache: "no-store", signal: AbortSignal.timeout(4000) });
+  } catch {
+    // 콜드스타트 실패는 무시
+  }
+}
+
+async function loadDashboard() {
+  const loading = document.getElementById("loading");
+  if (loading) {
+    loading.style.display = "block";
+    loading.innerText = "실시간 데이터를 불러오는 중입니다...";
+  }
+
+  try {
+    const picks = await fetchPicksWithRec();
+    renderSections(picks);
+  } catch (err) {
+    console.error("fetch dashboard error", err);
+    renderSections(FALLBACK_PICKS);
+  } finally {
+    if (loading) loading.style.display = "none";
+  }
+}
+
+async function fetchPicksWithRec() {
+  const picksRes = await fetchWithTimeout(`${API_BASE_URL}/picks`, { timeout: REQUEST_TIMEOUT_MS });
+  if (!picksRes.ok) throw new Error(`picks error ${picksRes.status}`);
+  const picks = await picksRes.json();
+  if (!Array.isArray(picks) || !picks.length) throw new Error("empty picks");
+
+  // 개별 recommendation 병렬 호출
+  const enriched = await Promise.all(
+    picks.map(async (p) => {
+      try {
+        const recRes = await fetchWithTimeout(`${API_BASE_URL}/recommendation/${encodeURIComponent(p.ticker)}`, {
+          timeout: REQUEST_TIMEOUT_MS,
+        });
+        if (!recRes.ok) throw new Error(`rec error ${recRes.status}`);
+        const rec = await recRes.json();
+        return { ...p, rec };
+      } catch (e) {
+        console.warn("rec fallback", p.ticker, e);
+        return { ...p, rec: null };
+      }
+    })
+  );
+  return enriched;
+}
+
+async function fetchWithTimeout(url, { timeout = REQUEST_TIMEOUT_MS, ...options } = {}) {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeout);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(id);
+  }
+}
+
+function renderSections(items) {
+  const usBox = document.getElementById("us-picks");
+  const krBox = document.getElementById("kr-picks");
+  const etfBox = document.getElementById("etf-picks");
+  if (!usBox || !krBox) return;
+  usBox.innerHTML = "";
+  krBox.innerHTML = "";
+  if (etfBox) etfBox.innerHTML = "";
+
+  const renderCard = (target, item) => {
+    const rec = item.rec?.recommendation;
+    const price = item.rec?.current_price;
+    const buy = rec?.buy_price;
+    const sell = rec?.sell_price;
+    const action = rec?.action || "HOLD";
+    const currency = item.rec?.currency || (item.ticker.endsWith(".KS") ? "KRW" : "USD");
+    const card = document.createElement("div");
+    card.className = "stock-card";
+    card.onclick = () => (window.location.href = `/detail.html?ticker=${encodeURIComponent(item.ticker)}`);
+    card.innerHTML = `
+      <div class="card-top">
+        <div class="name">${item.name || item.ticker}</div>
+        <div class="badge">${item.country}</div>
+      </div>
+      <div class="ticker">${item.ticker}</div>
+      <div class="price-block">
+        <div class="price">${formatPrice(price, currency)}</div>
+        <div class="action ${action.toLowerCase()}">${action}</div>
+      </div>
+      <div class="targets">
+        <div>Buy <span>${formatPrice(buy, currency)}</span></div>
+        <div>Sell <span>${formatPrice(sell, currency)}</span></div>
+      </div>
+      <div class="score">Score ${item.score ?? "-"}</div>
+    `;
+    target.appendChild(card);
+  };
+
+  items.filter((p) => p.country === "US").slice(0, 5).forEach((p) => renderCard(usBox, p));
+  items.filter((p) => p.country === "KR").slice(0, 5).forEach((p) => renderCard(krBox, p));
+  if (etfBox) items.filter((p) => p.country === "ETF").slice(0, 5).forEach((p) => renderCard(etfBox, p));
+}
+
+function formatPrice(val, currency = "USD") {
+  if (val === null || val === undefined || Number.isNaN(val)) return "준비중";
+  try {
+    if (currency === "KRW") return `${Math.round(val).toLocaleString("ko-KR")}원`;
+    return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 }).format(val);
+  } catch {
+    return `${val}`;
+  }
+}
