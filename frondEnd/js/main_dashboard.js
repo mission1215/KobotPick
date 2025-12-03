@@ -34,6 +34,7 @@ const HEADLINE_FALLBACK = [
 
 document.addEventListener("DOMContentLoaded", () => {
   wakeUpServer();
+  showDashboardSkeleton();
   loadDashboard();
   loadMarketSnapshot();
   loadHeadlines();
@@ -179,6 +180,35 @@ function renderSections(items) {
   items.filter((p) => p.country === "US").slice(0, 5).forEach((p) => renderCard(usBox, p));
   items.filter((p) => p.country === "KR").slice(0, 5).forEach((p) => renderCard(krBox, p));
   if (etfBox) items.filter((p) => p.country === "ETF").slice(0, 5).forEach((p) => renderCard(etfBox, p));
+}
+
+function showDashboardSkeleton() {
+  const usBox = document.getElementById("us-picks");
+  const krBox = document.getElementById("kr-picks");
+  const etfBox = document.getElementById("etf-picks");
+  [usBox, krBox, etfBox].forEach((box) => {
+    if (!box) return;
+    box.innerHTML = "";
+    renderSkeletonCards(box, 5);
+  });
+  const track = document.getElementById("headline-track");
+  if (track) {
+    track.innerHTML = `<span class="headline-empty">헤드라인을 준비 중...</span>`;
+  }
+}
+
+function renderSkeletonCards(target, count = 3) {
+  for (let i = 0; i < count; i += 1) {
+    const card = document.createElement("div");
+    card.className = "stock-card skeleton-card";
+    card.innerHTML = `
+      <div class="skeleton-line wide"></div>
+      <div class="skeleton-line short"></div>
+      <div class="skeleton-line mid"></div>
+      <div class="skeleton-line short"></div>
+    `;
+    target.appendChild(card);
+  }
 }
 
 function renderSnapshot(data) {

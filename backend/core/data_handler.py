@@ -3,7 +3,7 @@ import os
 import time
 import requests
 import yfinance as yf
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Tuple
 from datetime import datetime
 
 # 환경변수 (Render 대시보드에서 설정)
@@ -14,6 +14,9 @@ ALPHA_KEYS = [
     for name in ["ALPHA_VANTAGE_KEY"] + [f"ALPHA_VANTAGE_KEY{i}" for i in range(1, 6)]
     if (v := os.getenv(name))
 ]
+
+# 단순 TTL 캐시 (가격 재호출 최소화)
+PRICE_CACHE: Dict[str, Tuple[float, Optional[Dict]]] = {}
 
 def finnhub_quote(ticker: str) -> Optional[Dict]:
     if not FINNHUB_KEY:
@@ -85,24 +88,37 @@ def yfinance_quote(ticker: str) -> Optional[Dict]:
     except Exception:
         return None
 
-def get_price(ticker: str) -> Optional[Dict]:
-    """Finnhub → Alpha Vantage → yfinance 순으로 시도"""
-    result = finnhub_quote(ticker)
+def get_price(ticker: str, ttl: int = 90) -> Optional[Dict]:
+    """Finnhub → Alpha Vantage → yfinance 순으로 시도, TTL 캐시 포함."""
+    ticker_key = ticker.upper()
+    now = time.time()
+
+    # 캐시 히트 시 바로 반환
+    cached = PRICE_CACHE.get(ticker_key)
+    if cached:
+        saved_time, saved_value = cached
+        if now - saved_time < ttl:
+            return saved_value
+
+    result = finnhub_quote(ticker_key)
     if result:
-        print(f"[Finnhub] {ticker}: {result['price']}")
+        PRICE_CACHE[ticker_key] = (now, result)
+        print(f"[Finnhub] {ticker_key}: {result['price']}")
         return result
 
-    result = alpha_quote(ticker)
+    result = alpha_quote(ticker_key)
     if result:
-        print(f"[Alpha] {ticker}: {result['price']}")
+        PRICE_CACHE[ticker_key] = (now, result)
+        print(f"[Alpha] {ticker_key}: {result['price']}")
         return result
 
-    result = yfinance_quote(ticker)
+    result = yfinance_quote(ticker_key)
     if result:
-        print(f"[yfinance] {ticker}: {result['price']}")
+        PRICE_CACHE[ticker_key] = (now, result)
+        print(f"[yfinance] {ticker_key}: {result['price']}")
         return result
 
-    print(f"[모든 소스 실패] {ticker}")
+    print(f"[모든 소스 실패] {ticker_key}")
     return None
 
 
