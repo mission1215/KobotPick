@@ -113,16 +113,29 @@ h1 {
 }
 
 /* --- 헤드라인 티커 --- */
+.headline-section {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 14px;
+}
+.headline-header {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    padding: 0 2px;
+}
 .headline-bar {
     display: flex;
-    align-items: center;
+    flex-direction: column;
     gap: 10px;
     background: #0f1722;
     border: 1px solid rgba(255,255,255,0.06);
     border-radius: 12px;
     padding: 10px 12px;
     box-shadow: 0 12px 24px rgba(0,0,0,0.25);
-    margin-bottom: 14px;
 }
 .headline-label {
     font-size: 0.85em;
@@ -132,6 +145,11 @@ h1 {
     border: 1px solid rgba(255,111,97,0.4);
     color: #ffb3a8;
     white-space: nowrap;
+}
+.headline-sub {
+    margin: 0;
+    color: #8aa3b5;
+    font-size: 0.9em;
 }
 .headline-track {
     display: grid;
