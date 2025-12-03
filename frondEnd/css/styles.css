@@ -24,6 +24,7 @@ body {
 .change-positive { color: #00BCD4; }
 .change-negative { color: #FF6F61; }
 
+
 /* --- 히어로 영역 --- */
 .hero {
     display: flex;
