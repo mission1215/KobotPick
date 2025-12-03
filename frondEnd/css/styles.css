@@ -134,28 +134,29 @@ h1 {
     white-space: nowrap;
 }
 .headline-track {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 12px;
+    align-items: stretch;
     width: 100%;
 }
 .headline-card {
     display: grid;
     grid-template-rows: auto 1fr auto;
     gap: 6px;
-    background: linear-gradient(145deg, rgba(17,34,48,0.75), rgba(12,40,58,0.7));
-    border: 1px solid rgba(0,188,212,0.18);
+    background: linear-gradient(145deg, rgba(17,24,35,0.95), rgba(12,18,28,0.9));
+    border: 1px solid rgba(255,255,255,0.08);
     border-radius: 12px;
-    padding: 12px 14px;
+    padding: 10px 12px;
     text-decoration: none;
     color: #e8efe9;
-    box-shadow: 0 10px 22px rgba(0,0,0,0.22);
+    box-shadow: 0 10px 24px rgba(0,0,0,0.25);
     transition: transform 0.12s ease, box-shadow 0.2s ease, border-color 0.2s ease;
 }
 .headline-card:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 12px 26px rgba(0,0,0,0.26);
-    border-color: rgba(0,188,212,0.32);
+    transform: translateY(-2px);
+    box-shadow: 0 14px 30px rgba(0,0,0,0.32);
+    border-color: rgba(0,188,212,0.4);
 }
 .headline-chip {
     display: inline-flex;
