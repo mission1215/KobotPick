@@ -205,6 +205,7 @@ def get_top_stocks() -> List[Dict[str, str]]:
     now = time.time()
     if PICKS_CACHE["data"] and (now - PICKS_CACHE["ts"] < PICKS_CACHE_TTL_SECONDS):
         return PICKS_CACHE["data"]
+
     candidates = [
         {"ticker": "AAPL", "name": "Apple Inc.", "country": "US"},
         {"ticker": "TSLA", "name": "Tesla, Inc.", "country": "US"},
@@ -225,23 +226,43 @@ def get_top_stocks() -> List[Dict[str, str]]:
     ]
 
     results = []
-    for item in candidates:
+
+    def score_one(item: Dict[str, str]) -> Dict[str, Any]:
         ticker = item["ticker"]
         try:
             hist = get_historical_data(ticker, period="3mo")
             info = get_stock_info(ticker)
-            if hist is None or info.get('current_price') is None:
+            if hist is None or info.get("current_price") is None:
                 raise ValueError("data missing")
-
             df = calculate_technical_indicators(hist.copy())
             latest = df.iloc[-1]
             score = compute_score(latest, info)
-            results.append({
-                **item,
-                "score": score
-            })
+            return {**item, "score": score}
         except Exception as e:
             print(f"Score error for {ticker}: {e}")
+            return {**item, "score": 50}
+
+    # 병렬 처리 + 전체 타임박스(약 15초)로 응답 지연 최소화
+    start = time.time()
+    overall_budget = 15.0
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        future_map = {executor.submit(score_one, item): item for item in candidates}
+        for fut in as_completed(future_map):
+            elapsed = time.time() - start
+            remaining = overall_budget - elapsed
+            try:
+                res = fut.result(timeout=max(0.1, remaining))
+                results.append(res)
+            except Exception:
+                base = future_map[fut]
+                results.append({**base, "score": 50})
+            if time.time() - start > overall_budget:
+                break
+
+    # 타임아웃 등으로 빠진 항목 채우기
+    returned = {r["ticker"] for r in results}
+    for item in candidates:
+        if item["ticker"] not in returned:
             results.append({**item, "score": 50})
 
     # 상위 5개씩
