@@ -6,6 +6,7 @@ import requests
 import yfinance as yf
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, List, Tuple
+from xml.etree import ElementTree
 
 # 환경변수 (Render 대시보드에서 설정)
 FINNHUB_KEY = os.getenv("FINNHUB_KEY")
@@ -191,6 +192,33 @@ def get_company_news(ticker: str, limit: int = 6) -> List[Dict[str, Any]]:
     """
     is_korea = ticker.endswith(".KS") or re.fullmatch(r"[0-9]{6}", ticker)
     search_key = ticker.replace(".KS", "") if is_korea else ticker
+    if is_korea:
+        try:
+            r = requests.get(
+                "https://news.google.com/rss/search",
+                params={"q": search_key, "hl": "ko", "gl": "KR", "ceid": "KR:ko"},
+                timeout=8,
+            )
+            if r.status_code == 200 and r.text:
+                root = ElementTree.fromstring(r.text)
+                items: List[Dict[str, Any]] = []
+                for item in root.findall(".//item")[:limit]:
+                    title = item.findtext("title")
+                    link = item.findtext("link")
+                    pub = item.findtext("source") or "Google News"
+                    if title and link:
+                        items.append(
+                            {
+                                "title": title,
+                                "link": link,
+                                "publisher": pub,
+                                "published_at": item.findtext("pubDate"),
+                            }
+                        )
+                if items:
+                    return items
+        except Exception:
+            pass
 
     # 1) yfinance
     try:
@@ -303,6 +331,23 @@ def get_company_news(ticker: str, limit: int = 6) -> List[Dict[str, Any]]:
 
 def get_global_headlines(lang: str = "en") -> List[Dict]:
     lang = (lang or "en").lower()
+    # 0) Korean 우선 처리: 구글 뉴스 RSS (무인증)
+    if lang == "ko":
+        try:
+            r = requests.get("https://news.google.com/rss?hl=ko&gl=KR&ceid=KR:ko", timeout=8)
+            if r.status_code == 200 and r.text:
+                root = ElementTree.fromstring(r.text)
+                items = []
+                for item in root.findall(".//item")[:8]:
+                    title = item.findtext("title")
+                    link = item.findtext("link")
+                    if title and link:
+                        items.append({"title": title, "link": link, "publisher": "Google News"})
+                if items:
+                    return items
+        except Exception:
+            pass
+
     if FINNHUB_KEY:
         try:
             r = requests.get(f"https://finnhub.io/api/v1/news?category=general&token={FINNHUB_KEY}")

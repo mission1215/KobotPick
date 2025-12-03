@@ -3,6 +3,7 @@
 // 기본 API 엔드포인트 (커스터마이징 가능)
 const API_BASE_URL = (window.KOBOT_API_BASE_URL || "https://kobotpick.onrender.com/api/v1").replace(/\/+$/, "");
 const LANG_STORAGE_KEY = "kobot-lang";
+const FAVORITES_KEY = "kobot-favorites";
 let currentLang = localStorage.getItem(LANG_STORAGE_KEY) || "ko";
 const HEADLINE_SUBTEXT = {
   ko: "빠르게 훑어보는 오늘의 주요 헤드라인",
@@ -69,6 +70,32 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   const sub = document.querySelector(".headline-sub");
   if (sub) sub.textContent = HEADLINE_SUBTEXT[currentLang] || HEADLINE_SUBTEXT.en;
+
+  const searchInput = document.getElementById("search-input");
+  const searchIcon = document.querySelector(".search-icon");
+  const goSearch = () => {
+    if (!searchInput) return;
+    const raw = searchInput.value.trim();
+    if (!raw) return;
+    const normalized = /^[0-9]{6}$/.test(raw) ? `${raw}.KS` : raw.toUpperCase();
+    window.location.href = `/detail.html?ticker=${encodeURIComponent(normalized)}`;
+  };
+  if (searchInput) {
+    searchInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") goSearch();
+    });
+  }
+  if (searchIcon) {
+    searchIcon.style.cursor = "pointer";
+    searchIcon.addEventListener("click", goSearch);
+  }
+  const favScroll = document.getElementById("fav-scroll");
+  if (favScroll) {
+    favScroll.addEventListener("click", () => {
+      const target = document.getElementById("fav-section");
+      if (target) target.scrollIntoView({ behavior: "smooth" });
+    });
+  }
 });
 
 async function wakeUpServer() {
@@ -178,11 +205,14 @@ function renderSections(items) {
   const usBox = document.getElementById("us-picks");
   const krBox = document.getElementById("kr-picks");
   const etfBox = document.getElementById("etf-picks");
+  const favBox = document.getElementById("favorites-list");
   if (!usBox || !krBox) return;
   usBox.innerHTML = "";
   krBox.innerHTML = "";
   if (etfBox) etfBox.innerHTML = "";
+  if (favBox) favBox.innerHTML = "";
 
+  const favorites = loadFavorites();
   const renderCard = (target, item) => {
     const rec = item.rec?.recommendation;
     const price = item.rec?.current_price;
@@ -190,6 +220,7 @@ function renderSections(items) {
     const sell = rec?.sell_price;
     const action = rec?.action || "HOLD";
     const currency = item.rec?.currency || (item.ticker.endsWith(".KS") ? "KRW" : "USD");
+    const favOn = favorites.includes(item.ticker);
     const card = document.createElement("div");
     card.className = "stock-card";
     card.onclick = () => (window.location.href = `/detail.html?ticker=${encodeURIComponent(item.ticker)}`);
@@ -197,6 +228,7 @@ function renderSections(items) {
       <div class="card-top">
         <div class="name">${item.name || item.ticker}</div>
         <div class="badge">${item.country}</div>
+        <button class="card-fav ${favOn ? "on" : ""}" data-ticker="${item.ticker}" aria-label="관심 목록 추가">★</button>
       </div>
       <div class="ticker">${item.ticker}</div>
       <div class="price-block">
@@ -209,12 +241,23 @@ function renderSections(items) {
       </div>
       <div class="score">Score ${item.score ?? "-"}</div>
     `;
+    const favBtn = card.querySelector(".card-fav");
+    if (favBtn) {
+      favBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        toggleFavorite(item.ticker);
+        favBtn.classList.toggle("on", isFavorite(item.ticker));
+        renderFavoritesSection(items);
+      });
+    }
     target.appendChild(card);
   };
 
   items.filter((p) => p.country === "US").slice(0, 5).forEach((p) => renderCard(usBox, p));
   items.filter((p) => p.country === "KR").slice(0, 5).forEach((p) => renderCard(krBox, p));
   if (etfBox) items.filter((p) => p.country === "ETF").slice(0, 5).forEach((p) => renderCard(etfBox, p));
+
+  renderFavoritesSection(items);
 }
 
 function showDashboardSkeleton() {
@@ -287,6 +330,76 @@ function renderHeadlines(items) {
       `
     )
     .join("");
+}
+
+function loadFavorites() {
+  try {
+    const raw = localStorage.getItem(FAVORITES_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+function saveFavorites(list) {
+  localStorage.setItem(FAVORITES_KEY, JSON.stringify(list));
+}
+function isFavorite(ticker) {
+  return loadFavorites().includes(ticker);
+}
+function toggleFavorite(ticker) {
+  const list = loadFavorites();
+  const idx = list.indexOf(ticker);
+  if (idx >= 0) list.splice(idx, 1);
+  else list.push(ticker);
+  saveFavorites(list);
+}
+
+function renderFavoritesSection(items) {
+  const box = document.getElementById("favorites-list");
+  if (!box) return;
+  const favs = loadFavorites();
+  if (!favs.length) {
+    box.classList.add("empty-state");
+    box.innerHTML = "아직 추가된 종목이 없습니다.";
+    return;
+  }
+  const dict = Object.fromEntries(items.map((i) => [i.ticker, i]));
+  box.classList.remove("empty-state");
+  box.innerHTML = favs
+    .map((t) => {
+      const item = dict[t];
+      const name = item?.name || t;
+      return `
+        <div class="fav-row" data-ticker="${t}">
+          <div class="fav-name">${name}</div>
+          <div class="fav-ticker">${t}</div>
+          <button class="fav-remove" aria-label="삭제">×</button>
+        </div>
+      `;
+    })
+    .join("");
+  box.querySelectorAll(".fav-row").forEach((row) => {
+    const t = row.getAttribute("data-ticker");
+    row.addEventListener("click", () => {
+      window.location.href = `/detail.html?ticker=${encodeURIComponent(t)}`;
+    });
+    const btn = row.querySelector(".fav-remove");
+    if (btn) {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        toggleFavorite(t);
+        renderFavoritesSection(items);
+        refreshCardFavoriteStates();
+      });
+    }
+  });
+}
+
+function refreshCardFavoriteStates() {
+  document.querySelectorAll(".card-fav").forEach((btn) => {
+    const t = btn.getAttribute("data-ticker");
+    btn.classList.toggle("on", isFavorite(t));
+  });
 }
 
 function formatPrice(val, currency = "USD") {

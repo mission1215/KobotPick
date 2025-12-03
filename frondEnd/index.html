@@ -75,15 +75,38 @@
             type="text"
             placeholder="티커 또는 종목명을 검색 (예: TSLA, 삼성전자)"
             aria-label="종목 검색"
+            id="search-input"
           />
           <span class="search-icon">🔍</span>
         </div>
-        <div class="fav-btn">
+        <button class="fav-btn" type="button" id="fav-scroll">
           <span class="fav-btn-icon">★</span>
-          내 관심 목록(준비중)
+          내 관심 목록
         </div>
       </div>
     </div>
+
+    <!-- 광고 영역 (상단) -->
+    <div class="ad-placeholder subtle" style="margin-top: 16px;">
+      <div class="ad-chip">Ad</div>
+      <div>
+        <div class="ad-title">상단 광고 영역</div>
+        <div class="ad-desc">승인 후 광고가 노출됩니다.</div>
+        <div class="ad-id">Adsense: pub-7730946066495644</div>
+      </div>
+    </div>
+
+    <!-- 관심 목록 -->
+    <section class="card stock-section" id="fav-section">
+      <div class="section-header">
+        <div class="section-title">
+          <span class="icon-badge">★</span>
+          내 관심 목록
+        </div>
+        <div class="section-sub">좋아요를 누른 종목이 여기에 모입니다.</div>
+      </div>
+      <div id="favorites-list" class="stock-list empty-state">아직 추가된 종목이 없습니다.</div>
+    </section>
 
     <!-- JS에서 쓰는 로딩 영역 -->
     <div id="loading" class="loading" aria-live="polite"></div>
