@@ -8,7 +8,12 @@ from datetime import datetime
 
 # 환경변수 (Render 대시보드에서 설정)
 FINNHUB_KEY = os.getenv("FINNHUB_KEY")
-ALPHA_KEY = os.getenv("ALPHA_VANTAGE_KEY")  # 하나만 있어도 됨
+# ALPHA_VANTAGE_KEY, ALPHA_VANTAGE_KEY1~5 등 여러 키 중 사용 가능한 것 선택
+ALPHA_KEYS = [
+    v
+    for name in ["ALPHA_VANTAGE_KEY"] + [f"ALPHA_VANTAGE_KEY{i}" for i in range(1, 6)]
+    if (v := os.getenv(name))
+]
 
 def finnhub_quote(ticker: str) -> Optional[Dict]:
     if not FINNHUB_KEY:
@@ -30,14 +35,16 @@ def finnhub_quote(ticker: str) -> Optional[Dict]:
     return None
 
 def alpha_quote(ticker: str) -> Optional[Dict]:
-    if not ALPHA_KEY:
+    if not ALPHA_KEYS:
         return None
+    # 간단한 라운드로빈으로 키를 돌려가며 사용 (호출 제한 완화)
+    key = ALPHA_KEYS[int(time.time()) % len(ALPHA_KEYS)]
     try:
         url = "https://www.alphavantage.co/query"
         params = {
             "function": "GLOBAL_QUOTE",
             "symbol": ticker,
-            "apikey": ALPHA_KEY,
+            "apikey": key,
         }
         r = requests.get(url, params=params, timeout=12)
         data = r.json().get("Global Quote", {})
@@ -50,8 +57,11 @@ def alpha_quote(ticker: str) -> Optional[Dict]:
                 "change_pct": round(change_pct, 2),
                 "source": "alpha",
             }
-    except Exception:
-        pass
+        # Alpha Vantage는 제한이 걸리면 Note 필드로 알려줌
+        if data and isinstance(data, dict) and data.get("Note"):
+            print(f"[Alpha throttled] {data.get('Note')}")
+    except Exception as exc:
+        print(f"[Alpha error] {ticker}: {exc}")
     return None
 
 def yfinance_quote(ticker: str) -> Optional[Dict]:
