@@ -36,6 +36,16 @@ body {
     padding: 24px;
     margin-bottom: 20px;
 }
+.hero-left {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+.hero-brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
 .eyebrow {
     letter-spacing: 0.12em;
     text-transform: uppercase;
@@ -196,6 +206,9 @@ h1 {
     text-transform: uppercase;
     color: #ff6f61; /* 레드 계열 포인트 컬러 */
     text-shadow: 0 0 12px rgba(255, 111, 97, 0.35);
+}
+.section-title .icon-badge {
+    margin-right: 8px;
 }
 .market-snapshot {
     display: grid;

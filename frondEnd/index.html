@@ -26,10 +26,15 @@
 
 <body>
     <div class="hero">
-        <div>
-            <p class="eyebrow">Kobot Pick</p>
-            <h1>오늘의 AI 추천 포트폴리오</h1>
-            <p class="sub">해외·국내·ETF 추천을 한 번에 확인하세요.</p>
+        <div class="hero-left">
+            <div class="hero-brand">
+                <div class="brand-mark">KP</div>
+                <div>
+                    <p class="eyebrow">Kobot Pick</p>
+                    <h1>오늘의 AI 추천 포트폴리오</h1>
+                    <p class="sub">해외·국내·ETF 추천을 한 번에 확인하세요.</p>
+                </div>
+            </div>
         </div>
         <div class="hero-actions">
             <select id="lang-select" class="lang-select">
@@ -44,7 +49,7 @@
 
     <!-- 뉴스 티커 -->
     <div class="headline-bar">
-        <div class="headline-label">Top News</div>
+        <div class="headline-label"><span class="icon-badge">N</span>Top News</div>
         <div id="headline-track" class="headline-track"></div>
     </div>
 
@@ -58,7 +63,7 @@
 
     <!-- 즐겨찾기 -->
     <div class="favorites-section">
-        <div class="section-title">즐겨찾기</div>
+        <div class="section-title"><span class="icon-badge">F</span>즐겨찾기</div>
         <div id="favorites-list" class="card-container"></div>
     </div>
 
@@ -70,17 +75,17 @@
     <div id="market-snapshot" class="market-snapshot"></div>
 
     <section class="section">
-        <div class="section-title">해외 추천 Top 5</div>
+        <div class="section-title"><span class="icon-badge">US</span>해외 추천 Top 5</div>
         <div id="us-picks" class="card-container"></div>
     </section>
 
     <section class="section">
-        <div class="section-title">국내 추천 Top 5</div>
+        <div class="section-title"><span class="icon-badge">KR</span>국내 추천 Top 5</div>
         <div id="kr-picks" class="card-container"></div>
     </section>
 
     <section class="section">
-        <div class="section-title">ETF 추천 Top 5</div>
+        <div class="section-title"><span class="icon-badge">ETF</span>ETF 추천 Top 5</div>
         <div id="etf-picks" class="card-container"></div>
     </section>
 
