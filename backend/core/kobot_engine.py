@@ -1,5 +1,6 @@
 # backend/core/kobot_engine.py
 import random
+import time
 from datetime import datetime
 from typing import List, Dict
 
@@ -12,6 +13,8 @@ from core.data_handler import (
 )
 
 ETF_TICKERS = {"SPY", "QQQ", "TQQQ", "SOXL", "ARKK", "VTI", "IWM"}
+ANALYSIS_CACHE: Dict[str, Dict] = {}
+ANALYSIS_TTL = 180  # 초 단위 캐시 TTL
 
 
 def infer_country(ticker: str) -> str:
@@ -105,6 +108,12 @@ def get_top_stocks() -> List[Dict]:
     return sorted(result, key=lambda x: x["score"], reverse=True)[:15]
 
 def analyze_and_recommend(ticker: str):
+    ticker_key = ticker.upper()
+    now = time.time()
+    cached = ANALYSIS_CACHE.get(ticker_key)
+    if cached and now - cached.get("_saved_at", 0) < ANALYSIS_TTL:
+        return {k: v for k, v in cached.items() if k != "_saved_at"}
+
     price_data = get_price(ticker)
     score = calculate_score(ticker)
     current_price = price_data["price"] if price_data else None
@@ -125,7 +134,7 @@ def analyze_and_recommend(ticker: str):
         "rationale": "가격 모멘텀과 밸류에이션을 종합한 자동 분석 결과입니다.",
     }
 
-    return {
+    result = {
         "ticker": ticker,
         "name": (price_data.get("name") if price_data else None) or ticker,
         "score": score,
@@ -140,3 +149,6 @@ def analyze_and_recommend(ticker: str):
         "profile": profile,
         "source": price_data["source"] if price_data else "none",
     }
+
+    ANALYSIS_CACHE[ticker_key] = {**result, "_saved_at": now}
+    return result

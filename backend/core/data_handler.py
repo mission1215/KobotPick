@@ -3,8 +3,8 @@ import os
 import time
 import requests
 import yfinance as yf
+from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, List, Tuple
-from datetime import datetime
 
 # 환경변수 (Render 대시보드에서 설정)
 FINNHUB_KEY = os.getenv("FINNHUB_KEY")
@@ -185,7 +185,10 @@ def get_historical_candles(ticker: str, days: int = 120) -> List[Dict[str, Any]]
 
 
 def get_company_news(ticker: str, limit: int = 6) -> List[Dict[str, Any]]:
-    """yfinance 뉴스 항목을 단순 정리."""
+    """
+    뉴스는 yfinance → Finnhub(보유 시) → Yahoo search 순서로 시도 후, 빈 리스트 반환.
+    """
+    # 1) yfinance
     try:
         news = getattr(yf.Ticker(ticker), "news", None) or []
         items: List[Dict[str, Any]] = []
@@ -202,9 +205,70 @@ def get_company_news(ticker: str, limit: int = 6) -> List[Dict[str, Any]]:
                     "published_at": n.get("providerPublishTime"),
                 }
             )
-        return items
+        if items:
+            return items
     except Exception:
-        return []
+        pass
+
+    # 2) Finnhub (보유 키가 있는 경우)
+    if FINNHUB_KEY:
+        try:
+            today = datetime.utcnow().date()
+            start = today - timedelta(days=30)
+            url = (
+                "https://finnhub.io/api/v1/company-news"
+                f"?symbol={ticker}&from={start}&to={today}&token={FINNHUB_KEY}"
+            )
+            r = requests.get(url, timeout=10)
+            if r.status_code == 200:
+                data = r.json() or []
+                items: List[Dict[str, Any]] = []
+                for n in data[:limit]:
+                    headline = n.get("headline")
+                    if not headline or not n.get("url"):
+                        continue
+                    items.append(
+                        {
+                            "title": headline,
+                            "link": n["url"],
+                            "publisher": n.get("source"),
+                            "published_at": n.get("datetime"),
+                        }
+                    )
+                if items:
+                    return items
+        except Exception:
+            pass
+
+    # 3) Yahoo search API (무인증)
+    try:
+        r = requests.get(
+            "https://query1.finance.yahoo.com/v1/finance/search",
+            params={"q": ticker, "quotesCount": 0, "newsCount": limit},
+            timeout=8,
+        )
+        if r.status_code == 200:
+            data = r.json() or {}
+            items: List[Dict[str, Any]] = []
+            for n in data.get("news", [])[:limit]:
+                title = n.get("title")
+                link = n.get("link")
+                if not title or not link:
+                    continue
+                items.append(
+                    {
+                        "title": title,
+                        "link": link,
+                        "publisher": n.get("publisher"),
+                        "published_at": n.get("providerPublishTime"),
+                    }
+                )
+            if items:
+                return items
+    except Exception:
+        pass
+
+    return []
 
 def get_global_headlines() -> List[Dict]:
     if FINNHUB_KEY:
