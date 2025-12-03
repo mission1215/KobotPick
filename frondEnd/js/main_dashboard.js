@@ -3,6 +3,13 @@
 const API_BASE_URL = "https://kobotpick.onrender.com/api/v1";
 const FAVORITES_KEY = 'kobot-favorites';
 
+setTimeout(() => {
+    fetch("https://kobotpick.onrender.com/warmup").catch(()=> {});
+}, 1000);
+setTimeout(() => {
+    fetch("https://kobotpick.onrender.com/warmup").catch(()=> {});
+}, 6000);
+
 // 1. 서버 깨우기 (최대 6번 시도)
 async function wakeUpServer() {
     for (let i = 0; i < 6; i++) {
