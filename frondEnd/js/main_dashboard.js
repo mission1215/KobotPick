@@ -267,11 +267,12 @@ function renderPickSections(items, { usContainer, krContainer, etfContainer }) {
         const price = item.rec?.current_price;
         const buy = rec?.buy_price;
         const sell = rec?.sell_price;
-        const action = rec?.action || 'HOLD';
+        const hasRec = !!item.rec;
+        const action = rec?.action || (hasRec ? 'HOLD' : '준비중');
         const currency = item.rec?.currency || (item.country === 'KR' ? 'KRW' : 'USD');
-        const formattedPrice = formatPrice(price, currency);
-        const formattedBuy = formatPrice(buy, currency);
-        const formattedSell = formatPrice(sell, currency);
+        const formattedPrice = price === null || price === undefined ? '준비중' : formatPrice(price, currency);
+        const formattedBuy = buy === null || buy === undefined ? '준비중' : formatPrice(buy, currency);
+        const formattedSell = sell === null || sell === undefined ? '준비중' : formatPrice(sell, currency);
 
         card.innerHTML = `
             <div class="card-top">
