@@ -1,6 +1,7 @@
 # backend/core/data_handler.py
 import os
 import time
+import re
 import requests
 import yfinance as yf
 from datetime import datetime, timedelta
@@ -188,6 +189,9 @@ def get_company_news(ticker: str, limit: int = 6) -> List[Dict[str, Any]]:
     """
     뉴스는 yfinance → Finnhub(보유 시) → Yahoo search 순서로 시도 후, 빈 리스트 반환.
     """
+    is_korea = ticker.endswith(".KS") or re.fullmatch(r"[0-9]{6}", ticker)
+    search_key = ticker.replace(".KS", "") if is_korea else ticker
+
     # 1) yfinance
     try:
         news = getattr(yf.Ticker(ticker), "news", None) or []
@@ -244,7 +248,8 @@ def get_company_news(ticker: str, limit: int = 6) -> List[Dict[str, Any]]:
     try:
         r = requests.get(
             "https://query1.finance.yahoo.com/v1/finance/search",
-            params={"q": ticker, "quotesCount": 0, "newsCount": limit},
+            params={"q": search_key, "quotesCount": 0, "newsCount": limit},
+            headers={"User-Agent": "Mozilla/5.0"},
             timeout=8,
         )
         if r.status_code == 200:
@@ -268,8 +273,8 @@ def get_company_news(ticker: str, limit: int = 6) -> List[Dict[str, Any]]:
     except Exception:
         pass
 
-    # 4) 최소 fallback: 종목 뉴스 페이지 링크라도 제공
-    return [
+    # 4) 최소 fallback: 종목 뉴스 페이지 링크라도 제공 (KR 종목은 네이버/구글 링크 포함)
+    fallback_links = [
         {
             "title": f"{ticker} 최신 뉴스 모아보기",
             "link": f"https://finance.yahoo.com/quote/{ticker}/news",
@@ -277,12 +282,24 @@ def get_company_news(ticker: str, limit: int = 6) -> List[Dict[str, Any]]:
             "published_at": None,
         },
         {
-            "title": f"{ticker} 검색 결과 (Google News)",
-            "link": f"https://news.google.com/search?q={ticker}",
+            "title": f"{search_key} 검색 결과 (Google News)",
+            "link": f"https://news.google.com/search?q={search_key}",
             "publisher": "Google News",
             "published_at": None,
         },
     ]
+
+    if is_korea:
+        fallback_links.insert(
+            0,
+            {
+                "title": f"{search_key} 네이버 금융 뉴스",
+                "link": f"https://finance.naver.com/item/news_news.naver?code={search_key}",
+                "publisher": "Naver Finance",
+                "published_at": None,
+            },
+        )
+    return fallback_links
 
 def get_global_headlines() -> List[Dict]:
     if FINNHUB_KEY:
