@@ -301,19 +301,27 @@ def get_company_news(ticker: str, limit: int = 6) -> List[Dict[str, Any]]:
         )
     return fallback_links
 
-def get_global_headlines() -> List[Dict]:
+def get_global_headlines(lang: str = "en") -> List[Dict]:
+    lang = (lang or "en").lower()
     if FINNHUB_KEY:
         try:
             r = requests.get(f"https://finnhub.io/api/v1/news?category=general&token={FINNHUB_KEY}")
             if r.status_code == 200:
                 news = r.json()[:8]
-                return [{"title": n["headline"], "link": n["url"]} for n in news if n.get("headline")]
+                return [{"title": n["headline"], "link": n["url"], "publisher": n.get("source")} for n in news if n.get("headline")]
         except Exception:
             pass
-    # fallback 뉴스
+    # fallback 뉴스 (언어별)
+    if lang == "ko":
+        return [
+            {"title": "미국 기술주 강세, 나스닥 상승 마감", "link": "https://finance.naver.com/news/"},
+            {"title": "반도체 업황 회복 기대감 확대", "link": "https://finance.naver.com/news/"},
+            {"title": "연준 금리 동결 기조 유지 전망", "link": "https://finance.naver.com/news/"},
+        ]
     return [
-        {"title": "미국 증시, 기술주 강세 지속", "link": "https://finance.yahoo.com"},
-        {"title": "반도체 업황 회복 기대감", "link": "https://finance.yahoo.com"},
+        {"title": "U.S. tech leads gains as Nasdaq closes higher", "link": "https://finance.yahoo.com"},
+        {"title": "Chip recovery optimism grows among investors", "link": "https://finance.yahoo.com"},
+        {"title": "Fed seen holding rates steady amid soft inflation", "link": "https://finance.yahoo.com"},
     ]
 
 def get_market_snapshot() -> Dict:

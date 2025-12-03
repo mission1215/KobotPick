@@ -2,6 +2,14 @@
 
 // 기본 API 엔드포인트 (커스터마이징 가능)
 const API_BASE_URL = (window.KOBOT_API_BASE_URL || "https://kobotpick.onrender.com/api/v1").replace(/\/+$/, "");
+const LANG_STORAGE_KEY = "kobot-lang";
+let currentLang = localStorage.getItem(LANG_STORAGE_KEY) || "ko";
+const HEADLINE_SUBTEXT = {
+  ko: "빠르게 훑어보는 오늘의 주요 헤드라인",
+  en: "Quick scan of today's key headlines",
+  ja: "今日の主要ヘッドラインをすばやくチェック",
+  zh: "快速浏览今日要闻",
+};
 
 const REQUEST_TIMEOUT_MS = 20000;
 const PICKS_REFRESH_MS = 60000;
@@ -27,10 +35,16 @@ const FALLBACK_PICKS = [
   { ticker: "ARKK", name: "ARK Innovation ETF", country: "ETF", score: 50 },
 ];
 
-const HEADLINE_FALLBACK = [
-  { title: "미국 증시, 기술주 강세 지속", link: "https://finance.yahoo.com" },
-  { title: "반도체 업황 회복 기대감", link: "https://finance.yahoo.com" },
-];
+const HEADLINE_FALLBACK = {
+  ko: [
+    { title: "미국 증시, 기술주 강세 지속", link: "https://finance.naver.com/news/" },
+    { title: "반도체 업황 회복 기대감", link: "https://finance.naver.com/news/" },
+  ],
+  en: [
+    { title: "U.S. tech leads gains as Nasdaq closes higher", link: "https://finance.yahoo.com" },
+    { title: "Chip recovery optimism grows among investors", link: "https://finance.yahoo.com" },
+  ],
+};
 
 document.addEventListener("DOMContentLoaded", () => {
   wakeUpServer();
@@ -41,6 +55,20 @@ document.addEventListener("DOMContentLoaded", () => {
   setInterval(loadDashboard, PICKS_REFRESH_MS);
   setInterval(loadMarketSnapshot, SNAPSHOT_REFRESH_MS);
   setInterval(loadHeadlines, HEADLINE_REFRESH_MS);
+
+  const langSelect = document.getElementById("lang-select");
+  if (langSelect) {
+    langSelect.value = currentLang;
+    langSelect.addEventListener("change", (e) => {
+      currentLang = e.target.value || "ko";
+      localStorage.setItem(LANG_STORAGE_KEY, currentLang);
+      loadHeadlines();
+      const sub = document.querySelector(".headline-sub");
+      if (sub) sub.textContent = HEADLINE_SUBTEXT[currentLang] || HEADLINE_SUBTEXT.en;
+    });
+  }
+  const sub = document.querySelector(".headline-sub");
+  if (sub) sub.textContent = HEADLINE_SUBTEXT[currentLang] || HEADLINE_SUBTEXT.en;
 });
 
 async function wakeUpServer() {
@@ -92,15 +120,22 @@ async function loadMarketSnapshot() {
 async function loadHeadlines() {
   const track = document.getElementById("headline-track");
   if (!track) return;
-  track.innerHTML = `<span class="headline-empty">헤드라인을 불러오는 중...</span>`;
+  track.innerHTML =
+    currentLang === "ko"
+      ? `<span class="headline-empty">헤드라인을 불러오는 중...</span>`
+      : `<span class="headline-empty">Loading headlines...</span>`;
   try {
-    const res = await fetchWithTimeout(`${API_BASE_URL}/market/headlines`, { timeout: REQUEST_TIMEOUT_MS });
+    const res = await fetchWithTimeout(
+      `${API_BASE_URL}/market/headlines?lang=${encodeURIComponent(currentLang)}`,
+      { timeout: REQUEST_TIMEOUT_MS }
+    );
     if (!res.ok) throw new Error(`headlines error ${res.status}`);
     const data = await res.json();
     renderHeadlines(data);
   } catch (err) {
     console.warn("headlines fallback", err);
-    renderHeadlines(HEADLINE_FALLBACK);
+    const fb = HEADLINE_FALLBACK[currentLang] || HEADLINE_FALLBACK.en;
+    renderHeadlines(fb);
   }
 }
 
@@ -244,9 +279,8 @@ function renderHeadlines(items) {
   }
   track.innerHTML = items
     .map(
-      (n, idx) => `
+      (n) => `
         <a class="headline-card" href="${n.link}" target="_blank" rel="noopener noreferrer">
-          <div class="headline-chip">N${idx + 1}</div>
           <div class="headline-title">${n.title}</div>
           <div class="headline-meta">${n.publisher || "Top News"}</div>
         </a>

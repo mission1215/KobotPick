@@ -56,7 +56,7 @@ function toggleFavorite(ticker, btn) {
     saveFavorites(list);
     if (btn) {
         const on = isFavorite(ticker);
-        btn.textContent = on ? "★ 즐겨찾기" : "☆ 즐겨찾기";
+        btn.textContent = on ? "★ 관심 목록" : "☆ 관심 목록";
     }
 }
 
@@ -132,7 +132,7 @@ function renderData(data) {
     const favBtn = document.getElementById("fav-toggle");
     if (favBtn) {
         const on = isFavorite(data.ticker);
-        favBtn.textContent = on ? "★ 즐겨찾기" : "☆ 즐겨찾기";
+        favBtn.textContent = on ? "★ 관심 목록" : "☆ 관심 목록";
         favBtn.onclick = (e) => {
             e.preventDefault();
             toggleFavorite(data.ticker, favBtn);

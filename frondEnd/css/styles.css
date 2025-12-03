@@ -664,19 +664,6 @@ body {
   border-color: rgba(56, 189, 248, 0.8);
 }
 
-.headline-chip {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 3px 9px;
-  border-radius: var(--radius-pill);
-  font-size: 0.75rem;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  background: rgba(30, 64, 175, 0.4);
-  color: #c7d2fe;
-}
-
 .headline-title {
   font-size: 0.88rem;
 }
@@ -788,6 +775,7 @@ body {
 #company-name {
   font-size: 1.1rem;
   font-weight: 600;
+  color: var(--accent);
 }
 
 #ticker-pill {

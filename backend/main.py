@@ -38,5 +38,5 @@ async def snapshot():
     return await run_in_threadpool(get_market_snapshot)
 
 @app.get("/api/v1/market/headlines")
-async def headlines():
-    return await run_in_threadpool(get_global_headlines)
+async def headlines(lang: str = "en"):
+    return await run_in_threadpool(get_global_headlines, lang)
