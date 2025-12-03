@@ -22,6 +22,7 @@ NO_KEYED_DATA = not FINNHUB_KEY and not ALPHA_KEYS
 # ==================== 캐시 ====================
 CACHE: Dict[str, tuple] = {}
 CACHE_TTL = 45  # 45초
+LAST_SNAPSHOT: Dict[str, Any] = {}
 
 def _cache_get(key: str):
     if key in CACHE:
@@ -397,7 +398,8 @@ def get_current_price(ticker: str) -> Optional[dict]:
         }
         _cache_set(cache_key, final)
         return final
-    return None
+    # 모든 소스 실패 시에도 최소 구조 반환
+    return {"price": 0.0, "change": 0.0, "change_pct": 0.0, "source": "fallback"}
 
 def get_historical_data(ticker: str, period: str = "3mo") -> Optional[pd.DataFrame]:
     symbol = normalize_symbol(ticker)
@@ -414,16 +416,18 @@ def get_stock_info(ticker: str) -> Dict[str, Any]:
         or alpha_quote(symbol)
         or (stooq_quote(symbol) if not is_korea else None)
         or yahoo_quote(symbol)
-        or {}
+        or {"price": 0.0, "prev": 0.0}
     )
     profile_finn = finnhub_profile(symbol)
     profile_yahoo = yahoo_profile(symbol)
     profile = {**profile_yahoo, **profile_finn}
+    price_val = quote.get("price", 0.0)
+    prev_val = quote.get("prev", price_val)
     return {
         "name": profile.get("name") or quote.get("name") or ticker,
-        "current_price": quote.get("price"),
-        "regular_market_price": quote.get("price"),
-        "previous_close": quote.get("prev"),
+        "current_price": price_val,
+        "regular_market_price": price_val,
+        "previous_close": prev_val,
         "currency": profile.get("currency") or quote.get("currency") or "USD",
         "exchange": profile.get("exchange") or quote.get("exchange") or "",
         "sector": profile.get("finnhubIndustry") or profile.get("sector"),
@@ -492,17 +496,16 @@ def get_market_snapshot() -> Dict[str, Any]:
         "USDKRW": "USD/KRW",
     }
     result = {}
-    start = time.time()
     for name, sym in indices.items():
-        if time.time() - start > 6:
-            # 오래 걸리면 남은 지표는 건너뛰고 빠르게 반환
-            break
         try:
             data = _calc_change(sym)
         except Exception:
             data = None
         if data:
             result[name] = data
+        else:
+            # 실패 시에도 키는 유지해 UI가 깨지지 않도록 한다.
+            result[name] = {"price": 0.0, "change": 0.0, "change_pct": 0.0}
     if not result:
         # 모든 소스 실패 시 최소 더미 값을 반환해 프론트에서 에러를 띄우지 않도록 한다.
         result = {
