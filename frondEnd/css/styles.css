@@ -291,22 +291,29 @@ body {
   color: var(--text-muted);
 }
 
-/* favorite button (UI only) */
+/* favorite button (툴바 관심목록 - 톤다운 버전) */
 
 .fav-btn {
   border-radius: var(--radius-pill);
-  border: 1px solid rgba(234, 179, 8, 0.7);
-  background: radial-gradient(circle at 0% 0%, rgba(250, 204, 21, 0.18), transparent 65%);
-  color: #facc15;
+  border: 1px solid rgba(148, 163, 184, 0.6);
+  background: rgba(15, 23, 42, 0.96);
+  color: var(--text-sub);
   font-size: 0.8rem;
   padding: 7px 12px;
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  cursor: default; /* 아직 기능 없으니 클릭 느낌 줄임 */
 }
 
 .fav-btn-icon {
-  font-size: 0.9rem;
+  font-size: 0.85rem;
+  opacity: 0.9;
+}
+
+.fav-btn:hover {
+  border-color: rgba(56, 189, 248, 0.9);
+  color: var(--accent-strong);
 }
 
 /* ---------- Common elements ---------- */
@@ -445,8 +452,8 @@ body {
 
 .stock-card .name {
   font-size: 0.92rem;
-  font-weight: 700;
-  color: var(--accent-strong);
+  font-weight: 600;
+  color: #e5e7eb;
 }
 
 .stock-card .badge {
@@ -457,37 +464,45 @@ body {
   color: #e5e7eb;
   background: rgba(15, 23, 42, 0.96);
 }
+
+/* 카드 내 관심 아이콘 – 미니멀 버전 */
+
 .card-fav {
-  margin-left: auto;
-  border: 1px solid rgba(248, 180, 58, 0.5);
-  background: radial-gradient(circle at 30% 20%, rgba(255, 216, 102, 0.25), transparent 65%),
-    linear-gradient(135deg, rgba(30, 41, 59, 0.92), rgba(15, 23, 42, 0.92));
-  color: #fbbf24;
-  border-radius: 10px;
-  width: 34px;
-  height: 28px;
+  margin-left: 8px;
+  border-radius: 50%;
+  width: 26px;
+  height: 26px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  border: 1px solid rgba(148, 163, 184, 0.7);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.78rem;
   cursor: pointer;
-  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.6);
+  box-shadow: none;
   transition:
-    transform 100ms ease-out,
-    box-shadow 150ms ease,
-    border-color 150ms ease,
-    background 150ms ease;
+    transform 80ms ease-out,
+    box-shadow 130ms ease,
+    border-color 130ms ease,
+    background 130ms ease,
+    color 130ms ease;
 }
+
 .card-fav:hover {
   transform: translateY(-1px);
-  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.8);
-  border-color: rgba(251, 191, 36, 0.8);
+  border-color: rgba(56, 189, 248, 0.9);
+  color: var(--accent-strong);
+  background: rgba(15, 23, 42, 0.96);
 }
+
 .card-fav.on {
-  background: linear-gradient(135deg, #f59e0b, #fbbf24);
-  color: #0f172a;
-  border-color: rgba(251, 191, 36, 0.9);
-  box-shadow: 0 12px 26px rgba(251, 191, 36, 0.35);
+  background: var(--accent-soft);
+  border-color: rgba(56, 189, 248, 0.9);
+  color: #e0f2fe;
 }
+
+/* --- 나머지 stock card 정보 --- */
 
 .stock-card .ticker {
   font-size: 0.8rem;
@@ -829,14 +844,21 @@ body {
   align-items: center;
 }
 
+/* 상세 상단 관심목록 버튼 */
+
 #fav-toggle {
   border-radius: var(--radius-pill);
-  border: 1px solid rgba(248, 113, 113, 0.7);
-  background: rgba(248, 113, 113, 0.12);
-  color: #fecaca;
+  border: 1px solid rgba(148, 163, 184, 0.75);
+  background: rgba(15, 23, 42, 0.96);
+  color: var(--text-sub);
   font-size: 0.78rem;
   padding: 6px 11px;
   cursor: pointer;
+}
+
+#fav-toggle:hover {
+  border-color: rgba(56, 189, 248, 0.9);
+  color: var(--accent-strong);
 }
 
 #current-price {
