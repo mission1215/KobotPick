@@ -251,6 +251,41 @@ def alpha_quote(symbol: str) -> Optional[dict]:
     return None
 
 
+def naver_api_quote(symbol: str) -> Optional[dict]:
+    """
+    네이버 공식 주식 API를 사용하는 KR 전용 실시간 시세.
+    예: https://api.stock.naver.com/stock/stockInfo?code=005930
+    """
+    base = symbol.replace(".KS", "").replace(".KQ", "")
+    if not (len(base) == 6 and base.isdigit()):
+        return None
+    try:
+        r = requests.get(
+            "https://api.stock.naver.com/stock/stockInfo",
+            params={"code": base},
+            timeout=5,
+            headers={
+                "Referer": "https://stock.naver.com/",
+                "User-Agent": "Mozilla/5.0",
+            },
+        )
+        if r.status_code != 200:
+            return None
+        data = r.json()
+        price = data.get("closePrice")
+        prev = data.get("prevClosePrice") or data.get("closePrice")
+        if price is None:
+            return None
+        return {
+            "price": float(str(price).replace(",", "")),
+            "prev": float(str(prev).replace(",", "")),
+            "source": "naver_api",
+        }
+    except Exception:
+        return None
+    return None
+
+
 def stooq_quote(symbol: str) -> Optional[dict]:
     """무료 stooq API (미국/일부 글로벌). 한국 종목은 지원하지 않음."""
     base = symbol.lower()
@@ -342,7 +377,8 @@ def get_current_price(ticker: str) -> Optional[dict]:
 
     is_korea = symbol.endswith(".KS") or symbol.endswith(".KQ")
     result = (
-        (naver_quote(symbol) if is_korea else None)
+        (naver_api_quote(symbol) if is_korea else None)
+        or (naver_quote(symbol) if is_korea else None)
         or finnhub_quote(symbol)
         or alpha_quote(symbol)
         or (stooq_quote(symbol) if not is_korea else None)
@@ -357,7 +393,7 @@ def get_current_price(ticker: str) -> Optional[dict]:
             "price": round(result["price"], 2),
             "change": round(change, 2),
             "change_pct": round(pct, 2),
-            "source": result["source"],
+            "source": result.get("source", "unknown"),
         }
         _cache_set(cache_key, final)
         return final
@@ -372,7 +408,8 @@ def get_stock_info(ticker: str) -> Dict[str, Any]:
     symbol = normalize_symbol(ticker)
     is_korea = symbol.endswith(".KS") or symbol.endswith(".KQ")
     quote = (
-        (naver_quote(symbol) if is_korea else None)
+        (naver_api_quote(symbol) if is_korea else None)
+        or (naver_quote(symbol) if is_korea else None)
         or finnhub_quote(symbol)
         or alpha_quote(symbol)
         or (stooq_quote(symbol) if not is_korea else None)
