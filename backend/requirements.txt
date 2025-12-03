@@ -1,9 +1,10 @@
 fastapi
-uvicorn
+uvicorn[standard]
 pandas
 pandas-ta
 pydantic
 pydantic-settings
 httpx
 requests
-# yfinance 완전 삭제!
+requests-toolbelt
+urllib3  # Retry 쓰려면 필요
