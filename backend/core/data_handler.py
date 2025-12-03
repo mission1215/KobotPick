@@ -340,12 +340,13 @@ def get_current_price(ticker: str) -> Optional[dict]:
     if cached:
         return cached
 
+    is_korea = symbol.endswith(".KS") or symbol.endswith(".KQ")
     result = (
-        finnhub_quote(symbol)
+        (naver_quote(symbol) if is_korea else None)
+        or finnhub_quote(symbol)
         or alpha_quote(symbol)
+        or (stooq_quote(symbol) if not is_korea else None)
         or yahoo_quote(symbol)
-        or (naver_quote(symbol) if symbol.endswith(".KS") or symbol.endswith(".KQ") else None)
-        or stooq_quote(symbol)
     )
     if result:
         prev_val = result.get("prev")
@@ -369,12 +370,13 @@ def get_historical_data(ticker: str, period: str = "3mo") -> Optional[pd.DataFra
 
 def get_stock_info(ticker: str) -> Dict[str, Any]:
     symbol = normalize_symbol(ticker)
+    is_korea = symbol.endswith(".KS") or symbol.endswith(".KQ")
     quote = (
-        finnhub_quote(symbol)
+        (naver_quote(symbol) if is_korea else None)
+        or finnhub_quote(symbol)
         or alpha_quote(symbol)
+        or (stooq_quote(symbol) if not is_korea else None)
         or yahoo_quote(symbol)
-        or (naver_quote(symbol) if symbol.endswith(".KS") or symbol.endswith(".KQ") else None)
-        or stooq_quote(symbol)
         or {}
     )
     profile_finn = finnhub_profile(symbol)
