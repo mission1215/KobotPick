@@ -1,14 +1,16 @@
 # backend/core/data_handler.py
 # Finnhub + Alpha Vantage (5키) 통합, 동기 코드 + 간단 캐시
 
-import requests
-import pandas as pd
-import xml.etree.ElementTree as ET
+import os
+import re
+import time
+from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, List
 from urllib.parse import quote_plus
-import os
-from datetime import datetime, timedelta
-import time
+
+import pandas as pd
+import requests
+import xml.etree.ElementTree as ET
 
 # ==================== 환경변수 ====================
 FINNHUB_KEY = os.getenv("FINNHUB_KEY")
@@ -53,6 +55,7 @@ def yahoo_quote(symbol: str) -> Optional[dict]:
             "https://query1.finance.yahoo.com/v7/finance/quote",
             params={"symbols": symbol},
             timeout=6,
+            headers={"User-Agent": "Mozilla/5.0"},
         )
         if r.status_code != 200:
             return None
@@ -67,6 +70,7 @@ def yahoo_quote(symbol: str) -> Optional[dict]:
         return {
             "price": float(price),
             "prev": float(prev) if prev is not None else None,
+            "source": "yahoo",
             "currency": q.get("currency"),
             "name": q.get("longName") or q.get("shortName") or symbol,
             "exchange": q.get("fullExchangeName") or q.get("exchange"),
@@ -246,6 +250,58 @@ def alpha_quote(symbol: str) -> Optional[dict]:
             continue
     return None
 
+
+def stooq_quote(symbol: str) -> Optional[dict]:
+    """무료 stooq API (미국/일부 글로벌). 한국 종목은 지원하지 않음."""
+    base = symbol.lower()
+    if "." not in base:
+        base = f"{base}.us"
+    try:
+        r = requests.get(
+            "https://stooq.pl/q/l/",
+            params={"s": base, "f": "sd2t2ohlcv", "h": "", "e": "json"},
+            timeout=6,
+            headers={"User-Agent": "Mozilla/5.0"},
+        )
+        if r.status_code == 200:
+            data = r.json().get("symbols", [])
+            if data and data[0].get("close"):
+                price = float(data[0]["close"])
+                prev = float(data[0].get("open") or price)
+                return {"price": price, "prev": prev, "source": "stooq"}
+    except Exception:
+        return None
+    return None
+
+
+def naver_quote(symbol: str) -> Optional[dict]:
+    """네이버 금융 HTML 파싱 (KR 6자리 코드만)."""
+    base = symbol.replace(".KS", "").replace(".KQ", "")
+    if not (len(base) == 6 and base.isdigit()):
+        return None
+    try:
+        r = requests.get(
+            "https://finance.naver.com/item/main.nhn",
+            params={"code": base},
+            timeout=6,
+            headers={"User-Agent": "Mozilla/5.0"},
+        )
+        if r.status_code != 200:
+            return None
+        html = r.text
+        # 기본 시세는 blind 클래스 숫자 첫 번째를 사용
+        m = re.search(r'no_today[^>]*>.*?<span class="blind">([0-9,\.]+)</span>', html, re.S)
+        if not m:
+            return None
+        price = float(m.group(1).replace(",", ""))
+        # 전일 종가 추출 (전일가 테이블)
+        prev_match = re.search(r'전일가[^>]*?blind">([0-9,\.]+)</span>', html)
+        prev = float(prev_match.group(1).replace(",", "")) if prev_match else price
+        return {"price": price, "prev": prev, "source": "naver"}
+    except Exception:
+        return None
+    return None
+
 def alpha_historical(symbol: str) -> Optional[pd.DataFrame]:
     if not ALPHA_KEYS:
         return None
@@ -284,7 +340,13 @@ def get_current_price(ticker: str) -> Optional[dict]:
     if cached:
         return cached
 
-    result = finnhub_quote(symbol) or alpha_quote(symbol) or yahoo_quote(symbol)
+    result = (
+        finnhub_quote(symbol)
+        or alpha_quote(symbol)
+        or yahoo_quote(symbol)
+        or (naver_quote(symbol) if symbol.endswith(".KS") or symbol.endswith(".KQ") else None)
+        or stooq_quote(symbol)
+    )
     if result:
         prev_val = result.get("prev")
         base_prev = prev_val if prev_val not in (None, 0) else result["price"]
@@ -307,7 +369,14 @@ def get_historical_data(ticker: str, period: str = "3mo") -> Optional[pd.DataFra
 
 def get_stock_info(ticker: str) -> Dict[str, Any]:
     symbol = normalize_symbol(ticker)
-    quote = finnhub_quote(symbol) or alpha_quote(symbol) or yahoo_quote(symbol) or {}
+    quote = (
+        finnhub_quote(symbol)
+        or alpha_quote(symbol)
+        or yahoo_quote(symbol)
+        or (naver_quote(symbol) if symbol.endswith(".KS") or symbol.endswith(".KQ") else None)
+        or stooq_quote(symbol)
+        or {}
+    )
     profile_finn = finnhub_profile(symbol)
     profile_yahoo = yahoo_profile(symbol)
     profile = {**profile_yahoo, **profile_finn}
