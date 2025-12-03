@@ -1,151 +1,170 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kobot Pick 상세 분석</title>
-    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="google-adsense-account" content="pub-7730946066495644" />
+  <title>Kobot Pick 상세 분석</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
 
-    <!-- 광고 스크립트 제거: 설정만 유지, 로딩 가벼움 -->
+  <script>
+    // 인덱스와 동일한 API Base 사용
+    window.KOBOT_API_BASE_URL = "https://kobotpick.onrender.com/api/v1";
+  </script>
 
-    <script>
-        window.KOBOT_API_BASE_URL = "https://kobotpick.onrender.com/api/v1/";
-    </script>
-    <link rel="stylesheet" href="css/styles.css">
-    <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+  <link rel="stylesheet" href="/css/styles.css" />
+  <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
-
-<div id="loading" class="loading">Kobot이 분석 중입니다...</div>
-
-<div id="skeleton-detail" class="skeleton-detail" style="display: none;">
-    <div class="skeleton-header">
-        <div class="ske-line wide"></div>
-        <div class="ske-line mid"></div>
-    </div>
-    <div class="skeleton-price-box">
-        <div class="ske-pill"></div>
-        <div class="ske-pill"></div>
-        <div class="ske-pill"></div>
-    </div>
-    <div class="ske-chart"></div>
-    <div class="skeleton-grid">
-        <div class="ske-card"></div>
-        <div class="ske-card"></div>
-        <div class="ske-card"></div>
-        <div class="ske-card"></div>
-        <div class="ske-card"></div>
-        <div class="ske-card"></div>
-    </div>
-    <div class="ske-news">
-        <div class="ske-line wide"></div>
-        <div class="ske-line mid"></div>
-        <div class="ske-line short"></div>
-    </div>
-</div>
-
-<div id="content" style="display: none;">
-    <div class="header">
-        <div class="company-title">
-            <div class="brand-mark">KP</div>
-            <div class="company-meta">
-                <div id="company-name" class="company-name"></div>
-                <div class="ticker-row">
-                    <div id="ticker-pill" class="ticker-pill"></div>
-                    <button id="fav-toggle" class="fav-btn" type="button">즐겨찾기</button>
-                </div>
+  <div class="app-root detail-page">
+    <!-- Header -->
+    <header class="hero">
+      <div class="hero-left">
+        <div class="brand-mark">KP</div>
+        <div class="hero-titles">
+          <p class="eyebrow">AI STOCK DETAIL</p>
+          <div class="detail-header-main">
+            <div class="detail-header-left">
+              <button class="back-btn" type="button" onclick="window.location.href='/'">
+                <span>←</span>
+                <span>대시보드</span>
+              </button>
+              <div class="detail-names">
+                <div id="company-name">로딩 중...</div>
+                <div id="ticker-pill">-</div>
+              </div>
             </div>
+            <div class="detail-header-right">
+              <select id="lang-select-detail" class="lang-select" aria-label="언어 선택">
+                <option value="ko">한국어 · KR</option>
+                <option value="en">English · US</option>
+              </select>
+              <button id="fav-toggle" type="button">☆ 즐겨찾기</button>
+            </div>
+          </div>
+          <p id="current-price">실시간 가격 데이터를 불러오는 중입니다...</p>
         </div>
-        <p id="current-price"></p>
-        <select id="lang-select-detail" class="lang-select">
-            <option value="ko">한국어</option>
-            <option value="en">English</option>
-            <option value="ja">日本語</option>
-            <option value="zh">中文</option>
-        </select>
+      </div>
+    </header>
+
+    <!-- 로딩 / 스켈레톤 -->
+    <div id="loading" class="loading" aria-live="polite"></div>
+
+    <div id="skeleton-detail">
+      <div class="detail-skeleton-row">
+        <div class="detail-skeleton-line long"></div>
+        <div class="detail-skeleton-line mid"></div>
+      </div>
+      <div class="detail-skeleton-row">
+        <div class="detail-skeleton-line long"></div>
+        <div class="detail-skeleton-line short"></div>
+        <div class="detail-skeleton-line mid"></div>
+      </div>
     </div>
 
-    <div class="price-box">
-        <div class="price-item">
-            <h3><span class="icon-badge">B</span>매수가 (BUY)</h3>
-            <p id="buy-price" class="buy"></p>
+    <!-- 실제 콘텐츠 -->
+    <div id="content" style="display:none;">
+      <!-- 상단: 차트 + 전략 -->
+      <section class="detail-main-grid">
+        <div class="card chart-card">
+          <div class="section-header">
+            <div class="section-title">
+              <span class="icon-badge">CH</span>
+              가격 차트
+            </div>
+            <div class="section-sub">최근 시세 흐름</div>
+          </div>
+          <div id="chart-area"></div>
         </div>
-        <div class="price-item">
-            <h3><span class="icon-badge">T</span>목표가 (SELL)</h3>
-            <p id="sell-price" class="sell"></p>
-        </div>
-        <div class="price-item">
-            <h3><span class="icon-badge danger">S</span>손절가 (STOP)</h3>
-            <p id="stop-loss" class="sell"></p>
-        </div>
-    </div>
 
-    <div class="rationale">
-        <h4 class="section-heading">
-            <span class="icon-badge">A</span>
-            Kobot 분석 근거 (<span id="action"></span>)
-        </h4>
-        <p id="rationale-text"></p>
-    </div>
+        <div class="card recommend-card">
+          <div class="section-header">
+            <div class="section-title">
+              <span class="icon-badge">AI</span>
+              AI 매매 전략
+            </div>
+            <div class="section-sub">당일 기준 권장 매매 전략</div>
+          </div>
 
-    <!-- 광고 자리 (승인 후 스크립트 교체) -->
-    <div class="ad-placeholder">
+          <div class="recommend-grid">
+            <div class="recommend-stat">
+              <div class="recommend-label">매수가</div>
+              <div id="buy-price" class="recommend-value">-</div>
+            </div>
+            <div class="recommend-stat">
+              <div class="recommend-label">매도가</div>
+              <div id="sell-price" class="recommend-value">-</div>
+            </div>
+            <div class="recommend-stat">
+              <div class="recommend-label">손절가</div>
+              <div id="stop-loss" class="recommend-value">-</div>
+            </div>
+          </div>
+
+          <div id="action" class="recommend-action-pill hold">전략 분석 중...</div>
+          <p id="rationale-text">
+            AI가 종목의 밸류에이션 · 모멘텀 · 변동성을 종합하여 전략을 제안합니다.
+          </p>
+
+          <div class="section-header" style="margin-top:8px;">
+            <div class="section-title">
+              <span class="icon-badge">F</span>
+              기본 팩터
+            </div>
+            <div class="section-sub">밸류에이션 · 재무 · 수급 지표</div>
+          </div>
+          <div id="fundamentals-grid"></div>
+        </div>
+      </section>
+
+      <!-- 하단: 뉴스 / 기업정보 -->
+      <section class="detail-bottom-grid">
+        <div class="card">
+          <div class="section-header">
+            <div class="section-title">
+              <span class="icon-badge">N</span>
+              관련 뉴스
+            </div>
+            <div class="section-sub">종목 관련 주요 이슈</div>
+          </div>
+          <ul id="news-list" class="news-list"></ul>
+        </div>
+
+        <div class="card">
+          <div class="section-header">
+            <div class="section-title">
+              <span class="icon-badge">CO</span>
+              기업 정보
+            </div>
+            <div class="section-sub">섹터 · 산업 · 재무 개요</div>
+          </div>
+          <ul id="profile-list"></ul>
+        </div>
+      </section>
+
+      <!-- 광고 영역 -->
+      <div class="ad-placeholder subtle">
         <div class="ad-chip">Ad</div>
         <div>
-            <div class="ad-title">광고 영역 준비중</div>
-            <div class="ad-desc">승인 완료 후 노출됩니다.</div>
-            <div class="ad-id">Account: pub-7730946066495644</div>
+          <div class="ad-title">종목 상세 하단 광고 영역</div>
+          <div class="ad-desc">여기에 네이티브 광고가 노출될 수 있습니다.</div>
+          <div class="ad-id">Adsense Account: pub-7730946066495644</div>
         </div>
+      </div>
+
+      <p class="disclaimer">
+        이 정보는 AI 알고리즘에 의한 참고용이며, 모든 투자 결정 및 책임은 사용자 본인에게 있습니다.
+      </p>
+
+      <div class="detail-footer-links">
+        <span>다른 종목도 살펴보시겠어요?</span>
+        <a href="/">Kobot Pick 대시보드로 이동</a>
+      </div>
     </div>
+  </div>
 
-    <div id="chart-area">
-        [전문 캔들 차트가 렌더링될 위치]
-    </div>
-
-    <div id="fundamentals-grid" class="data-grid"></div>
-
-    <div id="profile-section" class="profile-section">
-        <h4 class="section-heading">
-            <span class="icon-badge">P</span>기업 정보
-        </h4>
-        <ul class="profile-list" id="profile-list"></ul>
-    </div>
-
-    <div id="news-section" class="news-section">
-        <h4 class="section-heading">
-            <span class="icon-badge">N</span>관련 뉴스
-        </h4>
-        <ul id="news-list" class="news-list"></ul>
-    </div>
-
-    <p class="disclaimer">이 정보는 AI 알고리즘에 의한 참고용이며, 모든 투자 결정 및 책임은 사용자 본인에게 있습니다.</p>
-</div>
-
-<!-- Firebase Analytics -->
-<script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-    import { getAnalytics, logEvent } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-analytics.js";
-
-    const firebaseConfig = {
-        apiKey: "AIzaSyC9sChjp1QM263w9Guv76DvJ8lptRgG3rA",
-        authDomain: "kobotpick.firebaseapp.com",
-        projectId: "kobotpick",
-        storageBucket: "kobotpick.firebasestorage.app",
-        messagingSenderId: "194944764478",
-        appId: "1:194944764478:web:d875664bc7670a99a9df6f",
-        measurementId: "G-BTLSBL36Y3",
-    };
-
-    try {
-        const app = initializeApp(firebaseConfig);
-        const analytics = getAnalytics(app);
-        logEvent(analytics, "page_view");
-    } catch (err) {
-        console.error("Firebase init failed:", err);
-    }
-</script>
-
-<script src="js/chart_renderer.js"></script>
-<script src="js/stock_detail.js"></script>
+  <!-- Scripts -->
+  <script src="/js/chart_renderer.js"></script>
+  <script src="/js/stock_detail.js"></script>
 </body>
 </html>
