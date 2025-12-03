@@ -302,15 +302,23 @@ function renderPickSections(items, { usContainer, krContainer, etfContainer }) {
         }
     };
 
-    items
-        .filter((p) => p.country === 'US')
-        .forEach((p) => renderCard(usContainer, p));
-    items
-        .filter((p) => p.country === 'KR')
-        .forEach((p) => renderCard(krContainer, p));
-    items
-        .filter((p) => p.country === 'ETF')
-        .forEach((p) => etfContainer && renderCard(etfContainer, p));
+    const ensureByCountry = (country) => {
+        const list = items.filter((p) => p.country === country);
+        if (list.length >= 5) return list.slice(0, 5);
+        const used = new Set(list.map((p) => p.ticker));
+        const fallback = [];
+        for (const f of FALLBACK_PICKS.filter((p) => p.country === country)) {
+            if (!used.has(f.ticker)) {
+                fallback.push(f);
+            }
+            if (list.length + fallback.length >= 5) break;
+        }
+        return list.concat(fallback).slice(0, 5);
+    };
+
+    ensureByCountry('US').forEach((p) => renderCard(usContainer, p));
+    ensureByCountry('KR').forEach((p) => renderCard(krContainer, p));
+    if (etfContainer) ensureByCountry('ETF').forEach((p) => renderCard(etfContainer, p));
 }
 
 function renderCachedPicks() {
