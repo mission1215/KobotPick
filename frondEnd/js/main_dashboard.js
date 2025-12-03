@@ -5,6 +5,8 @@ const API_BASE_URL = (window.KOBOT_API_BASE_URL || "https://kobotpick.onrender.c
 
 const REQUEST_TIMEOUT_MS = 20000;
 const PICKS_REFRESH_MS = 60000;
+const SNAPSHOT_REFRESH_MS = 60000;
+const HEADLINE_REFRESH_MS = 300000;
 
 // 기본 표시용 목록 (API 실패 시)
 const FALLBACK_PICKS = [
@@ -25,10 +27,19 @@ const FALLBACK_PICKS = [
   { ticker: "ARKK", name: "ARK Innovation ETF", country: "ETF", score: 50 },
 ];
 
+const HEADLINE_FALLBACK = [
+  { title: "미국 증시, 기술주 강세 지속", link: "https://finance.yahoo.com" },
+  { title: "반도체 업황 회복 기대감", link: "https://finance.yahoo.com" },
+];
+
 document.addEventListener("DOMContentLoaded", () => {
   wakeUpServer();
   loadDashboard();
+  loadMarketSnapshot();
+  loadHeadlines();
   setInterval(loadDashboard, PICKS_REFRESH_MS);
+  setInterval(loadMarketSnapshot, SNAPSHOT_REFRESH_MS);
+  setInterval(loadHeadlines, HEADLINE_REFRESH_MS);
 });
 
 async function wakeUpServer() {
@@ -54,6 +65,41 @@ async function loadDashboard() {
     renderSections(FALLBACK_PICKS);
   } finally {
     if (loading) loading.style.display = "none";
+  }
+}
+
+async function loadMarketSnapshot() {
+  const box = document.getElementById("market-snapshot");
+  if (!box) return;
+  box.innerHTML = `
+    <div class="snapshot-skeleton"></div>
+    <div class="snapshot-skeleton"></div>
+    <div class="snapshot-skeleton"></div>
+  `;
+
+  try {
+    const res = await fetchWithTimeout(`${API_BASE_URL}/market/snapshot`, { timeout: REQUEST_TIMEOUT_MS });
+    if (!res.ok) throw new Error(`snapshot error ${res.status}`);
+    const data = await res.json();
+    renderSnapshot(data);
+  } catch (err) {
+    console.warn("snapshot fallback", err);
+    renderSnapshot(null);
+  }
+}
+
+async function loadHeadlines() {
+  const track = document.getElementById("headline-track");
+  if (!track) return;
+  track.innerHTML = `<span class="headline-empty">헤드라인을 불러오는 중...</span>`;
+  try {
+    const res = await fetchWithTimeout(`${API_BASE_URL}/market/headlines`, { timeout: REQUEST_TIMEOUT_MS });
+    if (!res.ok) throw new Error(`headlines error ${res.status}`);
+    const data = await res.json();
+    renderHeadlines(data);
+  } catch (err) {
+    console.warn("headlines fallback", err);
+    renderHeadlines(HEADLINE_FALLBACK);
   }
 }
 
@@ -133,6 +179,42 @@ function renderSections(items) {
   items.filter((p) => p.country === "US").slice(0, 5).forEach((p) => renderCard(usBox, p));
   items.filter((p) => p.country === "KR").slice(0, 5).forEach((p) => renderCard(krBox, p));
   if (etfBox) items.filter((p) => p.country === "ETF").slice(0, 5).forEach((p) => renderCard(etfBox, p));
+}
+
+function renderSnapshot(data) {
+  const box = document.getElementById("market-snapshot");
+  if (!box) return;
+  if (!data || Object.keys(data).length === 0) {
+    box.innerHTML = `<div class="snapshot-error">지표를 불러올 수 없습니다.</div>`;
+    return;
+  }
+  box.innerHTML = Object.entries(data)
+    .map(([label, info]) => {
+      const change = info?.change_pct ?? 0;
+      const cls = change >= 0 ? "pos" : "neg";
+      const price = info?.price ?? 0;
+      const changeText = `${change > 0 ? "+" : ""}${change.toFixed(2)}%`;
+      return `
+        <div class="snapshot-item">
+          <div class="snap-label">${label}</div>
+          <div class="snap-value ${cls}">${price.toLocaleString()}</div>
+          <div class="snap-change ${cls}">${changeText}</div>
+        </div>
+      `;
+    })
+    .join("");
+}
+
+function renderHeadlines(items) {
+  const track = document.getElementById("headline-track");
+  if (!track) return;
+  if (!items || items.length === 0) {
+    track.innerHTML = `<span class="headline-empty">헤드라인을 불러올 수 없습니다.</span>`;
+    return;
+  }
+  track.innerHTML = items
+    .map((n) => `<a class="headline-item" href="${n.link}" target="_blank" rel="noopener noreferrer">${n.title}</a>`)
+    .join("<span class=\"headline-sep\">•</span>");
 }
 
 function formatPrice(val, currency = "USD") {
