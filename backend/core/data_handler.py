@@ -268,7 +268,21 @@ def get_company_news(ticker: str, limit: int = 6) -> List[Dict[str, Any]]:
     except Exception:
         pass
 
-    return []
+    # 4) 최소 fallback: 종목 뉴스 페이지 링크라도 제공
+    return [
+        {
+            "title": f"{ticker} 최신 뉴스 모아보기",
+            "link": f"https://finance.yahoo.com/quote/{ticker}/news",
+            "publisher": "Yahoo Finance",
+            "published_at": None,
+        },
+        {
+            "title": f"{ticker} 검색 결과 (Google News)",
+            "link": f"https://news.google.com/search?q={ticker}",
+            "publisher": "Google News",
+            "published_at": None,
+        },
+    ]
 
 def get_global_headlines() -> List[Dict]:
     if FINNHUB_KEY:

@@ -370,6 +370,30 @@ h1 {
     gap: 10px;
     flex-wrap: wrap;
 }
+.brand-mark {
+    width: 42px;
+    height: 42px;
+    border-radius: 12px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 800;
+    letter-spacing: 0.05em;
+    background: linear-gradient(135deg, #4caf50, #00bcd4);
+    color: #0d1117;
+    box-shadow: 0 12px 24px rgba(0,188,212,0.35);
+}
+.company-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.ticker-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
 .company-name {
     font-size: 1.6em;
     font-weight: 800;
@@ -397,6 +421,29 @@ h1 {
 .price-item p { margin: 5px 0 0; font-size: 1.5em; font-weight: bold; }
 .buy { color: #00BCD4; }
 .sell { color: #FF6F61; }
+.section-heading {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+.icon-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, rgba(79,192,141,0.28), rgba(0,188,212,0.22));
+    color: #c6f6d5;
+    font-weight: 800;
+    font-size: 0.75em;
+    box-shadow: 0 8px 16px rgba(0,188,212,0.25);
+}
+.icon-badge.danger {
+    background: linear-gradient(135deg, rgba(255,111,97,0.25), rgba(255,166,128,0.2));
+    color: #ffb3a8;
+    box-shadow: 0 8px 16px rgba(255,111,97,0.25);
+}
 .rationale {
     background: linear-gradient(135deg, rgba(12,18,30,0.95), rgba(12,24,36,0.9));
     padding: 16px;
