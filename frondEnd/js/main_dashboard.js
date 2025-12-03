@@ -8,7 +8,7 @@ const API_BASE_URL = (
 
 const REFRESH_MS = 60000; // 1분마다 새로고침 (유사 실시간)
 const REQUEST_TIMEOUT_MS = 20000; // API 최대 대기 20초
-const PICKS_TIMEOUT_MS = 12000; // 추천 목록 로딩은 빠르게 타임아웃 후 폴백
+const PICKS_TIMEOUT_MS = 18000; // 추천 목록 로딩 타임아웃을 약간 늘려 콜드스타트 대응
 const FAVORITES_KEY = 'kobot-favorites';
 let lastPicks = [];
 let lastRenderedPicks = [];
@@ -417,9 +417,15 @@ async function getPicksWithRecommendations(timeoutMs = REQUEST_TIMEOUT_MS) {
     }
 
     // 기존 방식 폴백: picks 후 개별 recommendation 병렬 호출
-    const response = await fetchWithTimeout(`${API_BASE_URL}/picks`, { timeout: timeoutMs });
-    if (!response.ok) throw new Error('Failed to fetch Kobot Picks');
-    const picks = await response.json();
+    let picks;
+    try {
+        const response = await fetchWithTimeout(`${API_BASE_URL}/picks`, { timeout: timeoutMs });
+        if (!response.ok) throw new Error('Failed to fetch Kobot Picks');
+        picks = await response.json();
+    } catch (err) {
+        console.error('picks fetch error', err);
+        return FALLBACK_PICKS;
+    }
     lastPicks = picks || [];
 
     const enriched = await Promise.all(
@@ -440,7 +446,7 @@ async function getPicksWithRecommendations(timeoutMs = REQUEST_TIMEOUT_MS) {
             }
         })
     );
-    return enriched;
+    return enriched.length ? enriched : FALLBACK_PICKS;
 }
 
 async function renderFavorites() {
