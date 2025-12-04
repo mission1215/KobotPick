@@ -47,14 +47,22 @@ def _extract_price(info: Dict[str, Any]) -> Optional[float]:
 def _compute_dividend_yield(info: Dict[str, Any], price: Optional[float]) -> Optional[float]:
     """
     우선순위:
-    1) dividendYield/trailingAnnualDividendYield (소수/퍼센트 모두 허용, 정규화)
+    1) trailingAnnualDividendYield → dividendYield (정규화)
     2) dividendRate(배당금)/current price 로 계산
     """
-    direct = _normalize_percent(
-        info.get("dividendYield") or info.get("trailingAnnualDividendYield")
-    )
-    if direct is not None:
-        return direct
+    for key in ["trailingAnnualDividendYield", "dividendYield"]:
+        direct = _normalize_percent(info.get(key))
+        if direct is not None:
+            # yfinance가 간혹 이상치(예: 0.37=37%)를 주는 경우,
+            # 배당금/현재가 계산값이 더 작게 나올 때는 계산값을 사용.
+            rate = _safe_float(
+                info.get("dividendRate") or info.get("trailingAnnualDividendRate")
+            )
+            if rate and price:
+                calc = rate / price
+                if calc and calc < direct * 0.6:
+                    return calc
+            return direct
 
     rate = _safe_float(
         info.get("dividendRate") or info.get("trailingAnnualDividendRate")
