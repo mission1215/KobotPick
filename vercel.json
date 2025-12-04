@@ -1,6 +1,7 @@
 {
   "rewrites": [
-    { "source": "/ads.txt", "destination": "/ads.txt" }
+    { "source": "/ads.txt", "destination": "/ads.txt" },
+    { "source": "/(.*)", "destination": "/frondEnd/$1" }
   ],
   "headers": [
     {
