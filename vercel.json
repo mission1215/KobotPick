@@ -1,5 +1,5 @@
 {
-  "public": "frondEnd",
+  "public": true,
   "rewrites": [
     { "source": "/ads.txt", "destination": "/ads.txt" }
   ],
@@ -9,6 +9,6 @@
       "headers": [
         { "key": "Content-Type", "value": "text/plain" }
       ]
-   }
+    }
   ]
 }
