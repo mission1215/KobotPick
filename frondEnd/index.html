@@ -14,12 +14,19 @@
 
   <!-- 백엔드 깨우기 & API Base 설정 (중요) -->
   <script>
-    // Render 서버 콜드스타트 방지
-    fetch("https://kobotpick.onrender.com/warmup").catch(() => {});
-    fetch("https://kobotpick.onrender.com/warmup").catch(() => {});
-
+    const host = window.location.hostname;
+    const isStg =
+      host.includes("kobot-pick-stg") ||
+      host.includes("stg.vercel.app") ||
+      host.includes("kobotpick-stg.onrender.com");
+    // Render 서버 콜드스타트 방지 (stg/prod 모두)
+    const warmupBase = isStg
+      ? "https://kobotpick-stg.onrender.com"
+      : "https://kobotpick.onrender.com";
+    fetch(`${warmupBase}/warmup`).catch(() => {});
+    fetch(`${warmupBase}/warmup`).catch(() => {});
     // JS에서 사용하는 공통 API Base
-    window.KOBOT_API_BASE_URL = "https://kobotpick.onrender.com/api/v1";
+    window.KOBOT_API_BASE_URL = `${warmupBase}/api/v1`;
   </script>
 </head>
 <body>

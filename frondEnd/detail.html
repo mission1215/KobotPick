@@ -8,8 +8,18 @@
   <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
 
   <script>
-    // 인덱스와 동일한 API Base 사용
-    window.KOBOT_API_BASE_URL = "https://kobotpick.onrender.com/api/v1";
+    // 인덱스와 동일하게 도메인에 따라 API Base 자동 분기
+    (function () {
+      const host = window.location.hostname;
+      const isStg =
+        host.includes("kobot-pick-stg") ||
+        host.includes("stg.vercel.app") ||
+        host.includes("kobotpick-stg.onrender.com");
+      const base = isStg
+        ? "https://kobotpick-stg.onrender.com"
+        : "https://kobotpick.onrender.com";
+      window.KOBOT_API_BASE_URL = `${base}/api/v1`;
+    })();
   </script>
 
   <link rel="stylesheet" href="/css/styles.css" />
