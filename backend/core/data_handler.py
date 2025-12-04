@@ -20,6 +20,50 @@ ALPHA_KEYS = [
 # 단순 TTL 캐시 (가격 재호출 최소화)
 PRICE_CACHE: Dict[str, Tuple[float, Optional[Dict]]] = {}
 
+def _safe_float(val) -> Optional[float]:
+    try:
+        return float(val)
+    except Exception:
+        return None
+
+def _normalize_percent(val: Optional[float]) -> Optional[float]:
+    """
+    yfinance는 배당/ROE 등을 소수(0.05)나 퍼센트(5)로 섞어서 반환할 때가 있어
+    1.5보다 큰 값은 퍼센트로 간주해 100으로 나눠 정규화한다.
+    """
+    num = _safe_float(val)
+    if num is None:
+        return None
+    return num / 100 if num > 1.5 else num
+
+def _extract_price(info: Dict[str, Any]) -> Optional[float]:
+    """펀더멘털 계산에 쓸 현재가를 info에서 최대한 추출."""
+    for key in ["currentPrice", "regularMarketPrice", "previousClose"]:
+        price = _safe_float(info.get(key))
+        if price:
+            return price
+    return None
+
+def _compute_dividend_yield(info: Dict[str, Any], price: Optional[float]) -> Optional[float]:
+    """
+    우선순위:
+    1) dividendYield/trailingAnnualDividendYield (소수/퍼센트 모두 허용, 정규화)
+    2) dividendRate(배당금)/current price 로 계산
+    """
+    direct = _normalize_percent(
+        info.get("dividendYield") or info.get("trailingAnnualDividendYield")
+    )
+    if direct is not None:
+        return direct
+
+    rate = _safe_float(
+        info.get("dividendRate") or info.get("trailingAnnualDividendRate")
+    )
+    if rate and price:
+        return rate / price
+
+    return None
+
 def finnhub_quote(ticker: str) -> Optional[Dict]:
     if not FINNHUB_KEY:
         return None
@@ -145,13 +189,14 @@ def get_fundamentals(ticker: str) -> Dict[str, Optional[float]]:
     """시가총액, PER 등 기본 펀더멘탈 지표를 반환."""
     try:
         info = yf.Ticker(ticker).info or {}
+        price = _extract_price(info)
         return {
             "market_cap": info.get("marketCap"),
-            "per": info.get("trailingPE"),
+            "per": info.get("trailingPE") or info.get("forwardPE"),
             "pbr": info.get("priceToBook"),
-            "roe": info.get("returnOnEquity"),
-            "dividend_yield": info.get("dividendYield"),
-            "psr": info.get("priceToSalesTrailing12Months"),
+            "roe": _normalize_percent(info.get("returnOnEquity")),
+            "dividend_yield": _compute_dividend_yield(info, price),
+            "psr": info.get("priceToSalesTrailing12Months") or info.get("priceToSalesTTM"),
         }
     except Exception:
         return {
