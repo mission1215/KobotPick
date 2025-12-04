@@ -169,6 +169,14 @@ body {
   }
 }
 
+/* 모바일에서 헤더 타이틀 줄바꿈 방지 */
+@media (max-width: 480px) {
+  .hero-title {
+    font-size: 1.42rem;
+    line-height: 1.24;
+  }
+}
+
 /* Lang / live */
 
 .lang-select {
