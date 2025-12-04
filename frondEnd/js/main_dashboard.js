@@ -226,8 +226,10 @@ function renderSections(items) {
     card.onclick = () => (window.location.href = `/detail.html?ticker=${encodeURIComponent(item.ticker)}`);
     card.innerHTML = `
       <div class="card-top">
-        <div class="name">${item.name || item.ticker}</div>
-        <div class="badge">${item.country}</div>
+        <div class="name-row">
+          <div class="name">${item.name || item.ticker}</div>
+          <div class="badge">${item.country}</div>
+        </div>
         <button class="card-fav ${favOn ? "on" : ""}" data-ticker="${item.ticker}" aria-label="관심 목록 추가">★</button>
       </div>
       <div class="ticker">${item.ticker}</div>

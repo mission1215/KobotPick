@@ -450,10 +450,16 @@ body {
   margin-bottom: 4px;
 }
 
+.name-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .stock-card .name {
   font-size: 0.92rem;
-  font-weight: 600;
-  color: #e5e7eb;
+  font-weight: 700;
+  color: var(--accent-2);
 }
 
 .stock-card .badge {
