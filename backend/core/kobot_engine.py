@@ -17,6 +17,8 @@ ANALYSIS_CACHE: Dict[str, Dict] = {}
 ANALYSIS_TTL = 180  # 초 단위 캐시 TTL
 TOP_PICKS_CACHE: Dict[str, Dict] = {}
 TOP_PICKS_TTL = 120  # 전체 picks 캐시 TTL
+CANDIDATE_CACHE: Dict[str, Dict] = {}
+CANDIDATE_TTL = 600  # 10분마다 후보 리스트 리프레시
 
 
 def infer_country(ticker: str) -> str:
@@ -87,18 +89,17 @@ def build_price_targets(price: float) -> Dict[str, float]:
 
 def get_top_stocks() -> List[Dict]:
     now = time.time()
+    cached_candidates = CANDIDATE_CACHE.get("all")
+    if cached_candidates and now - cached_candidates.get("_saved_at", 0) < CANDIDATE_TTL:
+        candidates = cached_candidates["data"]
+    else:
+        candidates = load_candidates_from_config()
+        CANDIDATE_CACHE["all"] = {"data": candidates, "_saved_at": now}
+
+    now = time.time()
     cached = TOP_PICKS_CACHE.get("picks")
     if cached and now - cached.get("_saved_at", 0) < TOP_PICKS_TTL:
         return cached["data"]
-
-    candidates = [
-        # US
-        "NVDA", "TSLA", "AAPL", "MSFT", "AMZN", "GOOGL", "META", "AMD",
-        # KR
-        "005930.KS", "000660.KS", "035420.KS", "005380.KS", "000270.KS", "051910.KS", "207940.KS", "068270.KS",
-        # ETF
-        "SPY", "QQQ", "TQQQ", "SOXL", "ARKK", "VTI", "IWM", "DIA"
-    ]
 
     result = []
     for t in candidates:
@@ -118,6 +119,37 @@ def get_top_stocks() -> List[Dict]:
     picked = sorted(result, key=lambda x: x["score"], reverse=True)[:15]
     TOP_PICKS_CACHE["picks"] = {"data": picked, "_saved_at": now}
     return picked
+
+
+def load_candidates_from_config() -> List[str]:
+    """
+    backend/config/tickers.json에서 US/KR/ETF 후보를 읽어와 하나의 리스트로 반환.
+    파일이 없거나 파싱 실패 시 기본 하드코딩 목록을 사용.
+    """
+    default_candidates = [
+        # US
+        "NVDA", "TSLA", "AAPL", "MSFT", "AMZN", "GOOGL", "META", "AMD",
+        # KR
+        "005930.KS", "000660.KS", "035420.KS", "005380.KS", "000270.KS", "051910.KS", "207940.KS", "068270.KS",
+        # ETF
+        "SPY", "QQQ", "TQQQ", "SOXL", "ARKK", "VTI", "IWM", "DIA", "XLK",
+    ]
+    try:
+        import json
+        from pathlib import Path
+
+        path = Path(__file__).resolve().parent.parent / "config" / "tickers.json"
+        if not path.exists():
+            return default_candidates
+        with path.open() as f:
+            data = json.load(f) or {}
+        us = data.get("US") or []
+        kr = data.get("KR") or []
+        etf = data.get("ETF") or []
+        combined = list(dict.fromkeys(us + kr + etf))  # 순서 유지 + 중복 제거
+        return combined or default_candidates
+    except Exception:
+        return default_candidates
 
 def analyze_and_recommend(ticker: str):
     ticker_key = ticker.upper()
