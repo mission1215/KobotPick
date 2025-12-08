@@ -16,7 +16,7 @@ const REQUEST_TIMEOUT_MS = 45000; // 서버 콜드/부하 시 여유를 둠
 const MAX_REC_CONCURRENCY = 5; // recommendation 병렬 호출 제한
 const INITIAL_ITEMS_PER_SECTION = 3;
 const MAX_ITEMS_PER_SECTION = 10;
-const adRenderedMap = {};
+const MORE_STATE = { us: false, kr: false, etf: false };
 const PICKS_REFRESH_MS = 120000; // 자주 새로고침해도 캐시 효과가 줄어들므로 2분으로 완화
 const SNAPSHOT_REFRESH_MS = 60000;
 const HEADLINE_REFRESH_MS = 300000;
@@ -322,13 +322,22 @@ function renderSections(items) {
     }
     btn.style.display = "block";
     btn.onclick = async () => {
+      const expanded = MORE_STATE[key];
+      if (expanded) {
+        area.hidden = true;
+        listEl.innerHTML = "";
+        MORE_STATE[key] = false;
+        btn.textContent = "더보기";
+        return;
+      }
       area.hidden = false;
       btn.disabled = true;
       btn.textContent = "로딩 중...";
-      renderAdOnce(key);
       await fetchRecommendations(allItems.slice(INITIAL_ITEMS_PER_SECTION));
       renderList(listEl, allItems.slice(INITIAL_ITEMS_PER_SECTION));
-      btn.textContent = "전체 보기";
+      MORE_STATE[key] = true;
+      btn.textContent = "간단히 보기";
+      btn.disabled = false;
     };
   };
 
@@ -337,19 +346,6 @@ function renderSections(items) {
   setupMore("etf", etfItems);
 
   renderFavoritesSection(items);
-}
-
-function renderAdOnce(sectionKey) {
-  if (adRenderedMap[sectionKey]) return;
-  const adEl = document.querySelector(`#${sectionKey}-more-area .adsbygoogle`);
-  if (adEl && window.adsbygoogle && typeof window.adsbygoogle.push === "function") {
-    try {
-      window.adsbygoogle.push({});
-      adRenderedMap[sectionKey] = true;
-    } catch (e) {
-      console.warn("adsbygoogle render error", sectionKey, e);
-    }
-  }
 }
 
 function showDashboardSkeleton() {
