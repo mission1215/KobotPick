@@ -26,6 +26,18 @@ ALPHA_KEYS = [
 PRICE_CACHE: Dict[str, Tuple[float, Optional[Dict]]] = {}
 # 종목명 캐시
 NAME_CACHE: Dict[str, str] = {}
+# 펀더멘털/프로필/뉴스/히스토리 캐시 (강한 캐시)
+FUNDAMENTALS_CACHE: Dict[str, Tuple[float, Dict]] = {}
+PROFILE_CACHE: Dict[str, Tuple[float, Dict]] = {}
+NEWS_CACHE: Dict[str, Tuple[float, List[Dict[str, Any]]]] = {}
+HIST_CACHE: Dict[str, Tuple[float, List[Dict[str, Any]]]] = {}
+
+# 캐시 TTL (초)
+PRICE_TTL = int(os.getenv("PRICE_TTL", "600"))  # 10분
+FUNDAMENTALS_TTL = int(os.getenv("FUNDAMENTALS_TTL", "900"))  # 15분
+PROFILE_TTL = int(os.getenv("PROFILE_TTL", "900"))
+NEWS_TTL = int(os.getenv("NEWS_TTL", "900"))
+HIST_TTL = int(os.getenv("HIST_TTL", "900"))
 
 def _safe_float(val) -> Optional[float]:
     try:
@@ -93,6 +105,18 @@ def _compute_dividend_yield(info: Dict[str, Any], price: Optional[float]) -> Opt
         return rate / price
 
     return None
+
+def _get_cached(cache: Dict[str, Tuple[float, Any]], key: str, ttl: int):
+    now = time.time()
+    entry = cache.get(key)
+    if entry:
+        saved, value = entry
+        if now - saved < ttl:
+            return value
+    return None
+
+def _set_cached(cache: Dict[str, Tuple[float, Any]], key: str, value: Any):
+    cache[key] = (time.time(), value)
 
 def finnhub_quote(ticker: str) -> Optional[Dict]:
     if not FINNHUB_KEY:
@@ -164,17 +188,15 @@ def yfinance_quote(ticker: str) -> Optional[Dict]:
     except Exception:
         return None
 
-def get_price(ticker: str, ttl: int = 90) -> Optional[Dict]:
+def get_price(ticker: str, ttl: int = PRICE_TTL) -> Optional[Dict]:
     """Finnhub → Alpha Vantage → yfinance 순으로 시도, TTL 캐시 포함."""
     ticker_key = ticker.upper()
     now = time.time()
 
     # 캐시 히트 시 바로 반환
-    cached = PRICE_CACHE.get(ticker_key)
-    if cached:
-        saved_time, saved_value = cached
-        if now - saved_time < ttl:
-            return saved_value
+    cached = _get_cached(PRICE_CACHE, ticker_key, ttl)
+    if cached is not None:
+        return cached
 
     result = finnhub_quote(ticker_key)
     if result:
@@ -182,7 +204,7 @@ def get_price(ticker: str, ttl: int = 90) -> Optional[Dict]:
             name = _get_ticker_name(ticker_key)
             if name:
                 result["name"] = name
-        PRICE_CACHE[ticker_key] = (now, result)
+        _set_cached(PRICE_CACHE, ticker_key, result)
         print(f"[Finnhub] {ticker_key}: {result['price']}")
         return result
 
@@ -192,13 +214,13 @@ def get_price(ticker: str, ttl: int = 90) -> Optional[Dict]:
             name = _get_ticker_name(ticker_key)
             if name:
                 result["name"] = name
-        PRICE_CACHE[ticker_key] = (now, result)
+        _set_cached(PRICE_CACHE, ticker_key, result)
         print(f"[Alpha] {ticker_key}: {result['price']}")
         return result
 
     result = yfinance_quote(ticker_key)
     if result:
-        PRICE_CACHE[ticker_key] = (now, result)
+        _set_cached(PRICE_CACHE, ticker_key, result)
         print(f"[yfinance] {ticker_key}: {result['price']}")
         return result
 
@@ -208,9 +230,13 @@ def get_price(ticker: str, ttl: int = 90) -> Optional[Dict]:
 
 def get_stock_profile(ticker: str) -> Dict[str, Any]:
     """섹터/산업/직원수 등 기업 정보를 가져옵니다."""
+    tkey = ticker.upper()
+    cached = _get_cached(PROFILE_CACHE, tkey, PROFILE_TTL)
+    if cached is not None:
+        return cached
     try:
         info = yf.Ticker(ticker).info or {}
-        return {
+        data = {
             "sector": info.get("sector"),
             "industry": info.get("industry") or info.get("industryDisp"),
             "website": info.get("website"),
@@ -219,16 +245,22 @@ def get_stock_profile(ticker: str) -> Dict[str, Any]:
             "exchange": info.get("exchange"),
             "currency": info.get("currency") or ("KRW" if ticker.endswith(".KS") else "USD"),
         }
+        _set_cached(PROFILE_CACHE, tkey, data)
+        return data
     except Exception:
         return {}
 
 
 def get_fundamentals(ticker: str) -> Dict[str, Optional[float]]:
     """시가총액, PER 등 기본 펀더멘탈 지표를 반환."""
+    tkey = ticker.upper()
+    cached = _get_cached(FUNDAMENTALS_CACHE, tkey, FUNDAMENTALS_TTL)
+    if cached is not None:
+        return cached
     try:
         info = yf.Ticker(ticker).info or {}
         price = _extract_price(info)
-        return {
+        data = {
             "market_cap": info.get("marketCap"),
             "per": info.get("trailingPE") or info.get("forwardPE"),
             "pbr": info.get("priceToBook"),
@@ -236,8 +268,10 @@ def get_fundamentals(ticker: str) -> Dict[str, Optional[float]]:
             "dividend_yield": _compute_dividend_yield(info, price),
             "psr": info.get("priceToSalesTrailing12Months") or info.get("priceToSalesTTM"),
         }
+        _set_cached(FUNDAMENTALS_CACHE, tkey, data)
+        return data
     except Exception:
-        return {
+        data = {
             "market_cap": None,
             "per": None,
             "pbr": None,
@@ -245,13 +279,20 @@ def get_fundamentals(ticker: str) -> Dict[str, Optional[float]]:
             "dividend_yield": None,
             "psr": None,
         }
+        _set_cached(FUNDAMENTALS_CACHE, tkey, data)
+        return data
 
 
 def get_historical_candles(ticker: str, days: int = 120) -> List[Dict[str, Any]]:
     """최근 일자별 시가/고가/저가/종가를 반환합니다."""
+    tkey = f"{ticker.upper()}_{days}"
+    cached = _get_cached(HIST_CACHE, tkey, HIST_TTL)
+    if cached is not None:
+        return cached
     try:
         hist = yf.Ticker(ticker).history(period=f"{days}d")
         if hist.empty:
+            _set_cached(HIST_CACHE, tkey, [])
             return []
         candles = []
         for ts, row in hist.iterrows():
@@ -264,8 +305,11 @@ def get_historical_candles(ticker: str, days: int = 120) -> List[Dict[str, Any]]
                     "close": float(row["Close"]),
                 }
             )
-        return candles[-days:]
+        candles = candles[-days:]
+        _set_cached(HIST_CACHE, tkey, candles)
+        return candles
     except Exception:
+        _set_cached(HIST_CACHE, tkey, [])
         return []
 
 
@@ -273,6 +317,11 @@ def get_company_news(ticker: str, limit: int = 6) -> List[Dict[str, Any]]:
     """
     뉴스는 yfinance → Finnhub(보유 시) → Yahoo search 순서로 시도 후, 빈 리스트 반환.
     """
+    cache_key = ticker.upper()
+    cached = _get_cached(NEWS_CACHE, cache_key, NEWS_TTL)
+    if cached is not None:
+        return cached
+
     is_korea = ticker.endswith(".KS") or re.fullmatch(r"[0-9]{6}", ticker)
     search_key = ticker.replace(".KS", "") if is_korea else ticker
     if is_korea:
@@ -299,6 +348,7 @@ def get_company_news(ticker: str, limit: int = 6) -> List[Dict[str, Any]]:
                             }
                         )
                 if items:
+                    _set_cached(NEWS_CACHE, cache_key, items)
                     return items
         except Exception:
             pass
@@ -321,6 +371,7 @@ def get_company_news(ticker: str, limit: int = 6) -> List[Dict[str, Any]]:
                 }
             )
         if items:
+            _set_cached(NEWS_CACHE, cache_key, items)
             return items
     except Exception:
         pass
@@ -351,6 +402,7 @@ def get_company_news(ticker: str, limit: int = 6) -> List[Dict[str, Any]]:
                         }
                     )
                 if items:
+                    _set_cached(NEWS_CACHE, cache_key, items)
                     return items
         except Exception:
             pass
@@ -378,8 +430,9 @@ def get_company_news(ticker: str, limit: int = 6) -> List[Dict[str, Any]]:
                         "publisher": n.get("publisher"),
                         "published_at": n.get("providerPublishTime"),
                     }
-                )
+            )
             if items:
+                _set_cached(NEWS_CACHE, cache_key, items)
                 return items
     except Exception:
         pass
@@ -410,6 +463,7 @@ def get_company_news(ticker: str, limit: int = 6) -> List[Dict[str, Any]]:
                 "published_at": None,
             },
         )
+    _set_cached(NEWS_CACHE, cache_key, fallback_links)
     return fallback_links
 
 def get_global_headlines(lang: str = "en") -> List[Dict]:
