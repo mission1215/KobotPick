@@ -11,6 +11,58 @@
   />
   <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="/css/styles.css" />
+  <!-- Google Analytics (GA4) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-BTLSBL36Y3"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag("js", new Date());
+    // 기본 페이지뷰
+    gtag("config", "G-BTLSBL36Y3", {
+      page_path: window.location.pathname,
+      page_title: document.title,
+    });
+    // 관심목록 클릭 이벤트
+    document.addEventListener("DOMContentLoaded", () => {
+      const favBtn = document.getElementById("fav-scroll");
+      if (favBtn) {
+        favBtn.addEventListener("click", () => {
+          gtag("event", "favorites_click", { location: "hero_toolbar" });
+        });
+      }
+      // 언어 변경 이벤트
+      const langSelect = document.querySelector(".lang-select");
+      if (langSelect) {
+        langSelect.addEventListener("change", (e) => {
+          gtag("event", "language_change", { value: e.target.value });
+        });
+      }
+      // 검색 입력 focus 이벤트
+      const searchInput = document.getElementById("search-input");
+      if (searchInput) {
+        searchInput.addEventListener("focus", () => {
+          gtag("event", "search_focus");
+        });
+        // 검색 제출 이벤트 (엔터/아이콘 클릭 모두 포함, 메인 JS에서 호출 전송)
+        const fireSearch = () => {
+          const raw = searchInput.value.trim();
+          if (!raw) return;
+          const normalized = /^[0-9]{6}$/.test(raw) ? `${raw}.KS` : raw.toUpperCase();
+          gtag("event", "search", {
+            search_term: raw,
+            normalized_ticker: normalized,
+          });
+        };
+        searchInput.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") fireSearch();
+        });
+        const searchIcon = document.querySelector(".search-icon");
+        if (searchIcon) {
+          searchIcon.addEventListener("click", fireSearch);
+        }
+      }
+    });
+  </script>
 
   <!-- 백엔드 깨우기 & API Base 설정 (중요) -->
   <script>

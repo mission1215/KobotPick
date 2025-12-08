@@ -6,6 +6,34 @@
   <meta name="google-adsense-account" content="pub-7730946066495644" />
   <title>Kobot Pick 상세 분석</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <!-- Google Analytics (GA4) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-BTLSBL36Y3"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag("js", new Date());
+    gtag("config", "G-BTLSBL36Y3", {
+      page_path: window.location.pathname,
+      page_title: document.title,
+    });
+    document.addEventListener("DOMContentLoaded", () => {
+      // 즐겨찾기 토글
+      const favBtn = document.getElementById("fav-toggle");
+      if (favBtn) {
+        favBtn.addEventListener("click", () => {
+          const ticker = document.getElementById("ticker-pill")?.textContent || "-";
+          gtag("event", "favorite_toggle", { ticker });
+        });
+      }
+      // 언어 변경
+      const langSelect = document.getElementById("lang-select-detail");
+      if (langSelect) {
+        langSelect.addEventListener("change", (e) => {
+          gtag("event", "language_change_detail", { value: e.target.value });
+        });
+      }
+    });
+  </script>
 
   <script>
     // 인덱스와 동일하게 도메인에 따라 API Base 자동 분기

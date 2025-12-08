@@ -78,6 +78,13 @@ document.addEventListener("DOMContentLoaded", () => {
     const raw = searchInput.value.trim();
     if (!raw) return;
     const normalized = /^[0-9]{6}$/.test(raw) ? `${raw}.KS` : raw.toUpperCase();
+    // GA4 검색 이벤트 전송
+    if (typeof gtag === "function") {
+      gtag("event", "search", {
+        search_term: raw,
+        normalized_ticker: normalized,
+      });
+    }
     window.location.href = `/detail.html?ticker=${encodeURIComponent(normalized)}`;
   };
   if (searchInput) {
