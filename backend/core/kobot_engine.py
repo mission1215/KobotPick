@@ -19,6 +19,7 @@ TOP_PICKS_CACHE: Dict[str, Dict] = {}
 TOP_PICKS_TTL = 120  # 전체 picks 캐시 TTL
 CANDIDATE_CACHE: Dict[str, Dict] = {}
 CANDIDATE_TTL = 600  # 10분마다 후보 리스트 리프레시
+TOP_PER_COUNTRY = 10  # 각 국가/ETF별 상위 개수
 
 
 def infer_country(ticker: str) -> str:
@@ -184,24 +185,29 @@ def get_top_stocks() -> List[Dict]:
     if cached and now - cached.get("_saved_at", 0) < TOP_PICKS_TTL:
         return cached["data"]
 
-    result = []
+    buckets: Dict[str, List[Dict]] = {"US": [], "KR": [], "ETF": []}
     for t in candidates:
         price_data = get_price(t)
         score = calculate_score(t)
-        result.append(
-            {
-                "ticker": t,
-                "name": price_data.get("name", t) if price_data else t,
-                "country": infer_country(t),
-                "score": score,
-                "price": price_data["price"] if price_data else 0,
-                "change_pct": price_data.get("change_pct", 0) if price_data else 0,
-            }
-        )
+        country = infer_country(t)
+        item = {
+            "ticker": t,
+            "name": price_data.get("name", t) if price_data else t,
+            "country": country,
+            "score": score,
+            "price": price_data["price"] if price_data else 0,
+            "change_pct": price_data.get("change_pct", 0) if price_data else 0,
+        }
+        if country in buckets:
+            buckets[country].append(item)
 
-    picked = sorted(result, key=lambda x: x["score"], reverse=True)[:15]
-    TOP_PICKS_CACHE["picks"] = {"data": picked, "_saved_at": now}
-    return picked
+    combined: List[Dict] = []
+    for country, items in buckets.items():
+        items_sorted = sorted(items, key=lambda x: x["score"], reverse=True)[:TOP_PER_COUNTRY]
+        combined.extend(items_sorted)
+
+    TOP_PICKS_CACHE["picks"] = {"data": combined, "_saved_at": now}
+    return combined
 
 
 def load_candidates_from_config() -> List[str]:
