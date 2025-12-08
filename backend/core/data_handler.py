@@ -31,6 +31,8 @@ FUNDAMENTALS_CACHE: Dict[str, Tuple[float, Dict]] = {}
 PROFILE_CACHE: Dict[str, Tuple[float, Dict]] = {}
 NEWS_CACHE: Dict[str, Tuple[float, List[Dict[str, Any]]]] = {}
 HIST_CACHE: Dict[str, Tuple[float, List[Dict[str, Any]]]] = {}
+# 시장 스냅샷 캐시
+SNAPSHOT_CACHE: Dict[str, Tuple[float, Dict]] = {}
 
 # 캐시 TTL (초)
 PRICE_TTL = int(os.getenv("PRICE_TTL", "600"))  # 10분
@@ -38,6 +40,7 @@ FUNDAMENTALS_TTL = int(os.getenv("FUNDAMENTALS_TTL", "900"))  # 15분
 PROFILE_TTL = int(os.getenv("PROFILE_TTL", "900"))
 NEWS_TTL = int(os.getenv("NEWS_TTL", "900"))
 HIST_TTL = int(os.getenv("HIST_TTL", "900"))
+SNAPSHOT_TTL = int(os.getenv("SNAPSHOT_TTL", "300"))
 
 def _safe_float(val) -> Optional[float]:
     try:
@@ -507,9 +510,23 @@ def get_global_headlines(lang: str = "en") -> List[Dict]:
     ]
 
 def get_market_snapshot() -> Dict:
+    cache_key = "MARKET_SNAPSHOT"
+    cached = _get_cached(SNAPSHOT_CACHE, cache_key, SNAPSHOT_TTL)
     indices = {"SPY": "S&P500", "QQQ": "NASDAQ", "^KS11": "KOSPI"}
     result = {}
+    success = False
+
     for sym, name in indices.items():
         data = get_price(sym)
-        result[name] = data or {"price": 0, "change_pct": 0}
+        if data:
+            success = True
+            result[name] = data
+        elif cached and cached.get(name):
+            # 최근 값이라도 유지
+            result[name] = cached[name]
+        else:
+            result[name] = {"price": 0, "change_pct": 0}
+
+    if success:
+        _set_cached(SNAPSHOT_CACHE, cache_key, result)
     return result
