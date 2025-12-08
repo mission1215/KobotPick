@@ -4,9 +4,14 @@ import time
 import re
 import requests
 import yfinance as yf
+import certifi
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, List, Tuple
 from xml.etree import ElementTree
+
+# 명시적으로 CA 번들 경로를 지정 (curl_cffi / yfinance SSL 오류 방지)
+os.environ.setdefault("CURL_CA_BUNDLE", certifi.where())
+os.environ.setdefault("SSL_CERT_FILE", certifi.where())
 
 # 환경변수 (Render 대시보드에서 설정)
 FINNHUB_KEY = os.getenv("FINNHUB_KEY")
