@@ -15,6 +15,8 @@ from core.data_handler import (
 ETF_TICKERS = {"SPY", "QQQ", "TQQQ", "SOXL", "ARKK", "VTI", "IWM"}
 ANALYSIS_CACHE: Dict[str, Dict] = {}
 ANALYSIS_TTL = 180  # 초 단위 캐시 TTL
+TOP_PICKS_CACHE: Dict[str, Dict] = {}
+TOP_PICKS_TTL = 120  # 전체 picks 캐시 TTL
 
 
 def infer_country(ticker: str) -> str:
@@ -84,6 +86,11 @@ def build_price_targets(price: float) -> Dict[str, float]:
     }
 
 def get_top_stocks() -> List[Dict]:
+    now = time.time()
+    cached = TOP_PICKS_CACHE.get("picks")
+    if cached and now - cached.get("_saved_at", 0) < TOP_PICKS_TTL:
+        return cached["data"]
+
     candidates = [
         "NVDA", "TSLA", "AAPL", "MSFT", "AMZN",
         "005930.KS", "000660.KS", "035420.KS", "005380.KS", "000270.KS",
@@ -105,7 +112,9 @@ def get_top_stocks() -> List[Dict]:
             }
         )
 
-    return sorted(result, key=lambda x: x["score"], reverse=True)[:15]
+    picked = sorted(result, key=lambda x: x["score"], reverse=True)[:15]
+    TOP_PICKS_CACHE["picks"] = {"data": picked, "_saved_at": now}
+    return picked
 
 def analyze_and_recommend(ticker: str):
     ticker_key = ticker.upper()

@@ -17,7 +17,7 @@ const MAX_REC_CONCURRENCY = 5; // recommendation 병렬 호출 제한
 const INITIAL_ITEMS_PER_SECTION = 3;
 const MAX_ITEMS_PER_SECTION = 10;
 const adRenderedMap = {};
-const PICKS_REFRESH_MS = 60000;
+const PICKS_REFRESH_MS = 120000; // 자주 새로고침해도 캐시 효과가 줄어들므로 2분으로 완화
 const SNAPSHOT_REFRESH_MS = 60000;
 const HEADLINE_REFRESH_MS = 300000;
 
