@@ -20,6 +20,8 @@ TOP_PICKS_TTL = 120  # 전체 picks 캐시 TTL
 CANDIDATE_CACHE: Dict[str, Dict] = {}
 CANDIDATE_TTL = 600  # 10분마다 후보 리스트 리프레시
 TOP_PER_COUNTRY = 10  # 각 국가/ETF별 상위 개수
+SCORE_CACHE: Dict[str, Tuple[float, int]] = {}
+SCORE_TTL = 600  # 점수 계산 캐시
 
 
 def infer_country(ticker: str) -> str:
@@ -38,6 +40,11 @@ def calculate_score(ticker: str) -> int:
     - 펀더멘털: PER/PBR/ROE/배당을 간단 반영
     - RSI: 과매수/과매도 구간 회피
     """
+    now = time.time()
+    cached = SCORE_CACHE.get(ticker.upper())
+    if cached and now - cached[0] < SCORE_TTL:
+        return cached[1]
+
     try:
         def safe_float(x):
             try:
@@ -46,9 +53,11 @@ def calculate_score(ticker: str) -> int:
                 return None
 
         stock = __import__("yfinance").Ticker(ticker)
-        hist = stock.history(period="180d")
+        hist = stock.history(period="120d")
         if len(hist) < 60:
-            return random.randint(62, 78)
+            score_val = random.randint(62, 78)
+            SCORE_CACHE[ticker.upper()] = (now, score_val)
+            return score_val
 
         close = hist["Close"]
         volume = hist.get("Volume")
@@ -147,9 +156,13 @@ def calculate_score(ticker: str) -> int:
 
         # 소폭 랜덤으로 상위권 동점 해소
         score += random.randint(-3, 5)
-        return max(55, min(95, int(score)))
+        score_val = max(55, min(95, int(score)))
+        SCORE_CACHE[ticker.upper()] = (now, score_val)
+        return score_val
     except Exception:
-        return random.randint(65, 85)
+        score_val = random.randint(65, 85)
+        SCORE_CACHE[ticker.upper()] = (now, score_val)
+        return score_val
 
 
 def score_to_action(score: int) -> str:
