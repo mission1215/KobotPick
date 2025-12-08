@@ -14,6 +14,8 @@ const HEADLINE_SUBTEXT = {
 
 const REQUEST_TIMEOUT_MS = 45000; // 서버 콜드/부하 시 여유를 둠
 const MAX_REC_CONCURRENCY = 5; // recommendation 병렬 호출 제한
+const INITIAL_ITEMS_PER_SECTION = 3;
+const MAX_ITEMS_PER_SECTION = 10;
 const PICKS_REFRESH_MS = 60000;
 const SNAPSHOT_REFRESH_MS = 60000;
 const HEADLINE_REFRESH_MS = 300000;
@@ -278,9 +280,41 @@ function renderSections(items) {
     target.appendChild(card);
   };
 
-  items.filter((p) => p.country === "US").slice(0, 5).forEach((p) => renderCard(usBox, p));
-  items.filter((p) => p.country === "KR").slice(0, 5).forEach((p) => renderCard(krBox, p));
-  if (etfBox) items.filter((p) => p.country === "ETF").slice(0, 5).forEach((p) => renderCard(etfBox, p));
+  const renderList = (target, list) => {
+    if (!target) return;
+    target.innerHTML = "";
+    list.forEach((p) => renderCard(target, p));
+  };
+
+  const usItems = items.filter((p) => p.country === "US").slice(0, MAX_ITEMS_PER_SECTION);
+  const krItems = items.filter((p) => p.country === "KR").slice(0, MAX_ITEMS_PER_SECTION);
+  const etfItems = items.filter((p) => p.country === "ETF").slice(0, MAX_ITEMS_PER_SECTION);
+
+  renderList(usBox, usItems.slice(0, INITIAL_ITEMS_PER_SECTION));
+  renderList(krBox, krItems.slice(0, INITIAL_ITEMS_PER_SECTION));
+  if (etfBox) renderList(etfBox, etfItems.slice(0, INITIAL_ITEMS_PER_SECTION));
+
+  const setupMore = (key, allItems) => {
+    const btn = document.querySelector(`.more-btn[data-section="${key}"]`);
+    const area = document.getElementById(`${key}-more-area`);
+    const listEl = document.getElementById(`${key}-more-list`);
+    if (!btn || !area || !listEl) return;
+    if (allItems.length <= INITIAL_ITEMS_PER_SECTION) {
+      btn.style.display = "none";
+      return;
+    }
+    btn.style.display = "block";
+    btn.onclick = () => {
+      area.hidden = false;
+      renderList(listEl, allItems.slice(INITIAL_ITEMS_PER_SECTION));
+      btn.disabled = true;
+      btn.textContent = "전체 보기";
+    };
+  };
+
+  setupMore("us", usItems);
+  setupMore("kr", krItems);
+  setupMore("etf", etfItems);
 
   renderFavoritesSection(items);
 }

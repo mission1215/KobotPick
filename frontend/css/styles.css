@@ -76,6 +76,41 @@ body {
   padding: 18px 18px 16px;
 }
 
+.section-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.more-btn {
+  width: 100%;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  background: rgba(15, 23, 42, 0.85);
+  color: var(--text-main);
+  padding: 10px 12px;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition: transform var(--transition-fast), border-color var(--transition-fast);
+}
+
+.more-btn:hover {
+  transform: translateY(-1px);
+  border-color: rgba(56, 189, 248, 0.8);
+}
+
+.more-area {
+  border: 1px dashed rgba(148, 163, 184, 0.35);
+  border-radius: var(--radius-md);
+  padding: 10px;
+  background: rgba(15, 23, 42, 0.4);
+}
+
+.ad-placeholder.compact {
+  padding: 10px 12px;
+  margin-bottom: 10px;
+}
+
 /* ---------- Header / Hero ---------- */
 
 .hero {
