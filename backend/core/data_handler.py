@@ -19,6 +19,8 @@ ALPHA_KEYS = [
 
 # 단순 TTL 캐시 (가격 재호출 최소화)
 PRICE_CACHE: Dict[str, Tuple[float, Optional[Dict]]] = {}
+# 종목명 캐시
+NAME_CACHE: Dict[str, str] = {}
 
 def _safe_float(val) -> Optional[float]:
     try:
@@ -42,6 +44,21 @@ def _extract_price(info: Dict[str, Any]) -> Optional[float]:
         price = _safe_float(info.get(key))
         if price:
             return price
+    return None
+
+def _get_ticker_name(ticker: str) -> Optional[str]:
+    """yfinance info에서 종목명 추출, 간단 캐시 포함."""
+    tkey = ticker.upper()
+    if tkey in NAME_CACHE:
+        return NAME_CACHE[tkey]
+    try:
+        info = yf.Ticker(ticker).info or {}
+        name = info.get("longName") or info.get("shortName")
+        if name:
+            NAME_CACHE[tkey] = name
+            return name
+    except Exception:
+        pass
     return None
 
 def _compute_dividend_yield(info: Dict[str, Any], price: Optional[float]) -> Optional[float]:
@@ -156,12 +173,20 @@ def get_price(ticker: str, ttl: int = 90) -> Optional[Dict]:
 
     result = finnhub_quote(ticker_key)
     if result:
+        if not result.get("name"):
+            name = _get_ticker_name(ticker_key)
+            if name:
+                result["name"] = name
         PRICE_CACHE[ticker_key] = (now, result)
         print(f"[Finnhub] {ticker_key}: {result['price']}")
         return result
 
     result = alpha_quote(ticker_key)
     if result:
+        if not result.get("name"):
+            name = _get_ticker_name(ticker_key)
+            if name:
+                result["name"] = name
         PRICE_CACHE[ticker_key] = (now, result)
         print(f"[Alpha] {ticker_key}: {result['price']}")
         return result
