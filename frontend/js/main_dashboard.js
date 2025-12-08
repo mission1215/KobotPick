@@ -125,6 +125,9 @@ async function loadDashboard(retried = false) {
 
   try {
     const picks = await fetchPicksWithRec();
+    // 초기 노출 3개씩만 추천 상세 호출
+    const { initialTargets } = sliceSections(picks);
+    await fetchRecommendations(initialTargets);
     renderSections(picks);
   } catch (err) {
     if (err?.name === "AbortError") {
@@ -190,30 +193,8 @@ async function fetchPicksWithRec() {
   if (!picksRes.ok) throw new Error(`picks error ${picksRes.status}`);
   const picks = await picksRes.json();
   if (!Array.isArray(picks) || !picks.length) throw new Error("empty picks");
-
-  // 개별 recommendation 호출 (동시 5개 제한)
-  const results = new Array(picks.length);
-  let cursor = 0;
-  const worker = async () => {
-    while (cursor < picks.length) {
-      const idx = cursor++;
-      const p = picks[idx];
-      try {
-        const recRes = await fetchWithTimeout(`${API_BASE_URL}/recommendation/${encodeURIComponent(p.ticker)}`, {
-          timeout: REQUEST_TIMEOUT_MS,
-        });
-        if (!recRes.ok) throw new Error(`rec error ${recRes.status}`);
-        const rec = await recRes.json();
-        results[idx] = { ...p, rec };
-      } catch (e) {
-        console.warn("rec fallback", p.ticker, e);
-        results[idx] = { ...p, rec: null };
-      }
-    }
-  };
-  const workers = Array.from({ length: Math.min(MAX_REC_CONCURRENCY, picks.length) }, worker);
-  await Promise.all(workers);
-  return results;
+  // 추천은 초기 3개씩만 먼저 호출, 나머지는 더보기 시 호출
+  return picks.map((p) => ({ ...p, rec: null }));
 }
 
 async function fetchWithTimeout(url, { timeout = REQUEST_TIMEOUT_MS, ...options } = {}) {
@@ -224,6 +205,43 @@ async function fetchWithTimeout(url, { timeout = REQUEST_TIMEOUT_MS, ...options 
   } finally {
     clearTimeout(id);
   }
+}
+
+function sliceSections(items) {
+  const usItems = items.filter((p) => p.country === "US").slice(0, MAX_ITEMS_PER_SECTION);
+  const krItems = items.filter((p) => p.country === "KR").slice(0, MAX_ITEMS_PER_SECTION);
+  const etfItems = items.filter((p) => p.country === "ETF").slice(0, MAX_ITEMS_PER_SECTION);
+  const initialTargets = [
+    ...usItems.slice(0, INITIAL_ITEMS_PER_SECTION),
+    ...krItems.slice(0, INITIAL_ITEMS_PER_SECTION),
+    ...etfItems.slice(0, INITIAL_ITEMS_PER_SECTION),
+  ].filter(Boolean);
+  return { usItems, krItems, etfItems, initialTargets };
+}
+
+async function fetchRecommendations(targets = []) {
+  const pending = targets.filter((t) => t && !t.rec);
+  if (!pending.length) return;
+  let cursor = 0;
+  const worker = async () => {
+    while (cursor < pending.length) {
+      const idx = cursor++;
+      const p = pending[idx];
+      try {
+        const recRes = await fetchWithTimeout(`${API_BASE_URL}/recommendation/${encodeURIComponent(p.ticker)}`, {
+          timeout: REQUEST_TIMEOUT_MS,
+        });
+        if (!recRes.ok) throw new Error(`rec error ${recRes.status}`);
+        const rec = await recRes.json();
+        pending[idx].rec = rec;
+      } catch (e) {
+        console.warn("rec fallback", p.ticker, e);
+        pending[idx].rec = null;
+      }
+    }
+  };
+  const workers = Array.from({ length: Math.min(MAX_REC_CONCURRENCY, pending.length) }, worker);
+  await Promise.all(workers);
 }
 
 function renderSections(items) {
@@ -286,9 +304,7 @@ function renderSections(items) {
     list.forEach((p) => renderCard(target, p));
   };
 
-  const usItems = items.filter((p) => p.country === "US").slice(0, MAX_ITEMS_PER_SECTION);
-  const krItems = items.filter((p) => p.country === "KR").slice(0, MAX_ITEMS_PER_SECTION);
-  const etfItems = items.filter((p) => p.country === "ETF").slice(0, MAX_ITEMS_PER_SECTION);
+  const { usItems, krItems, etfItems } = sliceSections(items);
 
   renderList(usBox, usItems.slice(0, INITIAL_ITEMS_PER_SECTION));
   renderList(krBox, krItems.slice(0, INITIAL_ITEMS_PER_SECTION));
@@ -304,10 +320,12 @@ function renderSections(items) {
       return;
     }
     btn.style.display = "block";
-    btn.onclick = () => {
+    btn.onclick = async () => {
       area.hidden = false;
-      renderList(listEl, allItems.slice(INITIAL_ITEMS_PER_SECTION));
       btn.disabled = true;
+      btn.textContent = "로딩 중...";
+      await fetchRecommendations(allItems.slice(INITIAL_ITEMS_PER_SECTION));
+      renderList(listEl, allItems.slice(INITIAL_ITEMS_PER_SECTION));
       btn.textContent = "전체 보기";
     };
   };
