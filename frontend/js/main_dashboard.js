@@ -15,7 +15,8 @@ const HEADLINE_SUBTEXT = {
 const REQUEST_TIMEOUT_MS = 45000; // 서버 콜드/부하 시 여유를 둠
 const MAX_REC_CONCURRENCY = 5; // recommendation 병렬 호출 제한
 const INITIAL_ITEMS_PER_SECTION = 3;
-const MAX_ITEMS_PER_SECTION = 10;
+const MORE_ITEMS_COUNT = 5; // 더보기 시 추가로 불러올 개수
+const MAX_ITEMS_PER_SECTION = INITIAL_ITEMS_PER_SECTION + MORE_ITEMS_COUNT; // 총 8개 제한
 const MORE_STATE = { us: false, kr: false, etf: false };
 const PICKS_REFRESH_MS = 120000; // 자주 새로고침해도 캐시 효과가 줄어들므로 2분으로 완화
 const SNAPSHOT_REFRESH_MS = 60000;
@@ -333,8 +334,10 @@ function renderSections(items) {
       area.hidden = false;
       btn.disabled = true;
       btn.textContent = "로딩 중...";
-      await fetchRecommendations(allItems.slice(INITIAL_ITEMS_PER_SECTION));
-      renderList(listEl, allItems.slice(INITIAL_ITEMS_PER_SECTION));
+      await fetchRecommendations(
+        allItems.slice(INITIAL_ITEMS_PER_SECTION, INITIAL_ITEMS_PER_SECTION + MORE_ITEMS_COUNT)
+      );
+      renderList(listEl, allItems.slice(INITIAL_ITEMS_PER_SECTION, INITIAL_ITEMS_PER_SECTION + MORE_ITEMS_COUNT));
       MORE_STATE[key] = true;
       btn.textContent = "간단히 보기";
       btn.disabled = false;
