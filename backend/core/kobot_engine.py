@@ -12,7 +12,7 @@ from core.data_handler import (
     get_company_news,
 )
 
-ETF_TICKERS = {"SPY", "QQQ", "TQQQ", "SOXL", "ARKK", "VTI", "IWM"}
+ETF_TICKERS = {"SPY", "QQQ", "TQQQ", "SOXL", "ARKK", "VTI", "IWM", "DIA", "XLK"}
 ANALYSIS_CACHE: Dict[str, Dict] = {}
 ANALYSIS_TTL = 180  # 초 단위 캐시 TTL
 TOP_PICKS_CACHE: Dict[str, Dict] = {}
@@ -92,9 +92,12 @@ def get_top_stocks() -> List[Dict]:
         return cached["data"]
 
     candidates = [
-        "NVDA", "TSLA", "AAPL", "MSFT", "AMZN",
-        "005930.KS", "000660.KS", "035420.KS", "005380.KS", "000270.KS",
-        "SPY", "QQQ", "TQQQ", "SOXL", "ARKK"
+        # US
+        "NVDA", "TSLA", "AAPL", "MSFT", "AMZN", "GOOGL", "META", "AMD",
+        # KR
+        "005930.KS", "000660.KS", "035420.KS", "005380.KS", "000270.KS", "051910.KS", "207940.KS", "068270.KS",
+        # ETF
+        "SPY", "QQQ", "TQQQ", "SOXL", "ARKK", "VTI", "IWM", "DIA"
     ]
 
     result = []
