@@ -355,7 +355,7 @@ function showDashboardSkeleton() {
   [usBox, krBox, etfBox].forEach((box) => {
     if (!box) return;
     box.innerHTML = "";
-    renderSkeletonCards(box, 5);
+    renderSkeletonCards(box, 2);
   });
   const track = document.getElementById("headline-track");
   if (track) {
