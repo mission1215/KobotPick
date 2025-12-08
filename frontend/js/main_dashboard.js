@@ -12,7 +12,8 @@ const HEADLINE_SUBTEXT = {
   zh: "快速浏览今日要闻",
 };
 
-const REQUEST_TIMEOUT_MS = 20000;
+const REQUEST_TIMEOUT_MS = 45000; // 서버 콜드/부하 시 여유를 둠
+const MAX_REC_CONCURRENCY = 5; // recommendation 병렬 호출 제한
 const PICKS_REFRESH_MS = 60000;
 const SNAPSHOT_REFRESH_MS = 60000;
 const HEADLINE_REFRESH_MS = 300000;
@@ -113,7 +114,7 @@ async function wakeUpServer() {
   }
 }
 
-async function loadDashboard() {
+async function loadDashboard(retried = false) {
   const loading = document.getElementById("loading");
   if (loading) {
     loading.style.display = "block";
@@ -124,7 +125,16 @@ async function loadDashboard() {
     const picks = await fetchPicksWithRec();
     renderSections(picks);
   } catch (err) {
-    console.error("fetch dashboard error", err);
+    if (err?.name === "AbortError") {
+      console.warn("fetch dashboard aborted (timeout)", err);
+    } else {
+      console.error("fetch dashboard error", err);
+    }
+    if (!retried && err?.name === "AbortError") {
+      // 한 번만 재시도
+      await new Promise((r) => setTimeout(r, 400));
+      return loadDashboard(true);
+    }
     renderSections(FALLBACK_PICKS);
   } finally {
     if (loading) loading.style.display = "none";
@@ -179,23 +189,29 @@ async function fetchPicksWithRec() {
   const picks = await picksRes.json();
   if (!Array.isArray(picks) || !picks.length) throw new Error("empty picks");
 
-  // 개별 recommendation 병렬 호출
-  const enriched = await Promise.all(
-    picks.map(async (p) => {
+  // 개별 recommendation 호출 (동시 5개 제한)
+  const results = new Array(picks.length);
+  let cursor = 0;
+  const worker = async () => {
+    while (cursor < picks.length) {
+      const idx = cursor++;
+      const p = picks[idx];
       try {
         const recRes = await fetchWithTimeout(`${API_BASE_URL}/recommendation/${encodeURIComponent(p.ticker)}`, {
           timeout: REQUEST_TIMEOUT_MS,
         });
         if (!recRes.ok) throw new Error(`rec error ${recRes.status}`);
         const rec = await recRes.json();
-        return { ...p, rec };
+        results[idx] = { ...p, rec };
       } catch (e) {
         console.warn("rec fallback", p.ticker, e);
-        return { ...p, rec: null };
+        results[idx] = { ...p, rec: null };
       }
-    })
-  );
-  return enriched;
+    }
+  };
+  const workers = Array.from({ length: Math.min(MAX_REC_CONCURRENCY, picks.length) }, worker);
+  await Promise.all(workers);
+  return results;
 }
 
 async function fetchWithTimeout(url, { timeout = REQUEST_TIMEOUT_MS, ...options } = {}) {
