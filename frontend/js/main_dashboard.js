@@ -453,25 +453,46 @@ function renderFavoritesSection(items) {
   }
   const dict = Object.fromEntries(items.map((i) => [i.ticker, i]));
   box.classList.remove("empty-state");
+  const buildPrice = (item) => {
+    if (!item) return "준비중";
+    const currency = item.rec?.currency || (item.ticker?.endsWith(".KS") ? "KRW" : "USD");
+    const price = item.rec?.current_price ?? item.price;
+    return formatPrice(price, currency);
+  };
   box.innerHTML = favs
     .map((t) => {
       const item = dict[t];
       const name = item?.name || t;
+      const change = typeof item?.change_pct === "number" ? item.change_pct.toFixed(2) : null;
       return `
-        <div class="fav-row" data-ticker="${t}">
+        <div class="fav-card" data-ticker="${t}">
+          <div class="fav-card-top">
+            <div class="fav-pill">
+              <span class="fav-ticker">${t}</span>
+              <span class="fav-country">${item?.country || "-"}</span>
+            </div>
+            <button class="fav-remove" aria-label="삭제">×</button>
+          </div>
           <div class="fav-name">${name}</div>
-          <div class="fav-ticker">${t}</div>
-          <button class="fav-remove" aria-label="삭제">×</button>
+          <div class="fav-meta">
+            <span class="fav-price">${buildPrice(item)}</span>
+            ${
+              change !== null
+                ? `<span class="fav-change ${item.change_pct >= 0 ? "up" : "down"}">${change}%</span>`
+                : ""
+            }
+            <span class="fav-score">Score ${item?.score ?? "-"}</span>
+          </div>
         </div>
       `;
     })
     .join("");
-  box.querySelectorAll(".fav-row").forEach((row) => {
-    const t = row.getAttribute("data-ticker");
-    row.addEventListener("click", () => {
+  box.querySelectorAll(".fav-card").forEach((card) => {
+    const t = card.getAttribute("data-ticker");
+    card.addEventListener("click", () => {
       window.location.href = `/detail.html?ticker=${encodeURIComponent(t)}`;
     });
-    const btn = row.querySelector(".fav-remove");
+    const btn = card.querySelector(".fav-remove");
     if (btn) {
       btn.addEventListener("click", (e) => {
         e.stopPropagation();
