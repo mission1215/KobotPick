@@ -453,9 +453,21 @@ body {
 /* favorites grid */
 
 #favorites-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  display: flex;
+  flex-wrap: nowrap;
   gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  scroll-snap-type: x mandatory;
+}
+
+#favorites-list::-webkit-scrollbar {
+  height: 8px;
+}
+
+#favorites-list::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.4);
+  border-radius: 999px;
 }
 
 #favorites-list.empty-state {
@@ -471,6 +483,8 @@ body {
   border: 1px solid rgba(56, 189, 248, 0.4);
   padding: 10px 12px;
   box-shadow: 0 10px 24px rgba(15, 23, 42, 0.85);
+  min-width: 230px;
+  scroll-snap-align: start;
   transition:
     transform 120ms ease-out,
     box-shadow 120ms ease-out,
