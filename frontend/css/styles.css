@@ -454,6 +454,8 @@ body {
 
 #favorites-list {
   display: flex;
+  flex-direction: row;
+  align-items: stretch;
   flex-wrap: nowrap;
   gap: 12px;
   overflow-x: auto;
@@ -484,6 +486,8 @@ body {
   padding: 10px 12px;
   box-shadow: 0 10px 24px rgba(15, 23, 42, 0.85);
   min-width: 230px;
+  max-width: 280px;
+  flex: 0 0 240px;
   scroll-snap-align: start;
   transition:
     transform 120ms ease-out,
