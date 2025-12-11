@@ -1,6 +1,7 @@
 # backend/core/kobot_engine.py
 import random
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from typing import List, Dict, Tuple
 
@@ -22,6 +23,7 @@ CANDIDATE_TTL = 600  # 10분마다 후보 리스트 리프레시
 TOP_PER_COUNTRY = 10  # 각 국가/ETF별 상위 개수
 SCORE_CACHE: Dict[str, Tuple[float, int]] = {}
 SCORE_TTL = 600  # 점수 계산 캐시
+TOP_WORKERS = 8  # 상위 종목 계산 시 동시 처리 스레드 수
 
 
 def infer_country(ticker: str) -> str:
@@ -184,6 +186,26 @@ def build_price_targets(price: float) -> Dict[str, float]:
         "stop_loss": round(price * 0.92, 2),
     }
 
+def _build_candidate_item(ticker: str) -> Dict:
+    """
+    가격/점수/국가를 한 번에 계산해 반환.
+    네트워크 지연이 길어도 개별 실패가 전체를 막지 않도록 빈 dict 허용.
+    """
+    try:
+        price_data = get_price(ticker)
+        score = calculate_score(ticker)
+        country = infer_country(ticker)
+        return {
+            "ticker": ticker,
+            "name": price_data.get("name", ticker) if price_data else ticker,
+            "country": country,
+            "score": score,
+            "price": price_data["price"] if price_data else 0,
+            "change_pct": price_data.get("change_pct", 0) if price_data else 0,
+        }
+    except Exception:
+        return {}
+
 def get_top_stocks() -> List[Dict]:
     now = time.time()
     cached_candidates = CANDIDATE_CACHE.get("all")
@@ -199,20 +221,14 @@ def get_top_stocks() -> List[Dict]:
         return cached["data"]
 
     buckets: Dict[str, List[Dict]] = {"US": [], "KR": [], "ETF": []}
-    for t in candidates:
-        price_data = get_price(t)
-        score = calculate_score(t)
-        country = infer_country(t)
-        item = {
-            "ticker": t,
-            "name": price_data.get("name", t) if price_data else t,
-            "country": country,
-            "score": score,
-            "price": price_data["price"] if price_data else 0,
-            "change_pct": price_data.get("change_pct", 0) if price_data else 0,
-        }
-        if country in buckets:
-            buckets[country].append(item)
+    workers = min(TOP_WORKERS, max(1, len(candidates)))
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        futures = {executor.submit(_build_candidate_item, t): t for t in candidates}
+        for fut in as_completed(futures):
+            item = fut.result() or {}
+            country = item.get("country")
+            if country in buckets and item.get("ticker"):
+                buckets[country].append(item)
 
     combined: List[Dict] = []
     for country, items in buckets.items():
