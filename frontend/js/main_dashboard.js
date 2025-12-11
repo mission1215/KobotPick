@@ -245,6 +245,20 @@ async function fetchRecommendations(targets = []) {
   await Promise.all(workers);
 }
 
+// ✅ [추가] 광고 초기화 함수
+function loadAdSense() {
+  try {
+    const ads = document.querySelectorAll(".adsbygoogle");
+    ads.forEach((ad) => {
+      if (!ad.getAttribute("data-adsbygoogle-status")) {
+        (window.adsbygoogle = window.adsbygoogle || []).push({});
+      }
+    });
+  } catch (e) {
+    console.warn("AdSense load error:", e);
+  }
+}
+
 function renderSections(items) {
   const usBox = document.getElementById("us-picks");
   const krBox = document.getElementById("kr-picks");
@@ -297,6 +311,7 @@ function renderSections(items) {
       });
     }
     target.appendChild(card);
+    loadAdSense()
   };
 
   const renderList = (target, list) => {

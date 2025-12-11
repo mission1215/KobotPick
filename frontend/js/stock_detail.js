@@ -123,7 +123,23 @@ async function fetchStockData() {
         if (loadingElement) loadingElement.style.display = "none";
         if (skeleton) skeleton.style.display = "none";
         if (contentElement) contentElement.style.display = "block";
+        // 콘텐츠가 보인 뒤 광고 초기화
+        requestAnimationFrame(loadAdSense);
     }
+}
+
+// ✅ [추가] 광고 초기화 함수
+function loadAdSense() {
+  try {
+    const ads = document.querySelectorAll(".adsbygoogle");
+    ads.forEach((ad) => {
+      if (!ad.getAttribute("data-adsbygoogle-status")) {
+        (window.adsbygoogle = window.adsbygoogle || []).push({});
+      }
+    });
+  } catch (e) {
+    console.warn("AdSense load error:", e);
+  }
 }
 
 function renderData(data) {
