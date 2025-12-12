@@ -1,0 +1,32 @@
+# Ignore everything by default in this folder (only keep source and metadata)
+*
+
+# Keep gitignore itself
+!.gitignore
+
+# Keep source we actually want in git
+!/lambda_function.py
+!/core/
+!/models/
+!/requirements.txt
+!/README.md
+
+# Common ignores
+__pycache__/
+*.pyc
+*.pyo
+*.so
+*.whl
+*.zip
+*.dist-info/
+*.data/
+.env
+.venv/
+venv/
+bin/
+lib/
+lib64/
+include/
+.idea/
+.vscode/
+.build_lambda/

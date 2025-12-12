@@ -1,0 +1,9 @@
+requests
+yfinance
+pandas
+numpy
+lxml
+html5lib
+beautifulsoup4
+pydantic
+pydantic-settings

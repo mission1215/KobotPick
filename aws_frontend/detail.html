@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="google-adsense-account" content="pub-7730946066495644" />
+  <script
+    async
+    src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-7730946066495644"
+    crossorigin="anonymous"
+  ></script>
+  <title>Kobot Pick 상세 분석</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <!-- Google Analytics (GA4) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-BTLSBL36Y3"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag("js", new Date());
+    gtag("config", "G-BTLSBL36Y3", {
+      page_path: window.location.pathname,
+      page_title: document.title,
+    });
+    document.addEventListener("DOMContentLoaded", () => {
+      // 즐겨찾기 토글
+      const favBtn = document.getElementById("fav-toggle");
+      if (favBtn) {
+        favBtn.addEventListener("click", () => {
+          const ticker = document.getElementById("ticker-pill")?.textContent || "-";
+          gtag("event", "favorite_toggle", { ticker });
+        });
+      }
+      // 언어 변경
+      const langSelect = document.getElementById("lang-select-detail");
+      if (langSelect) {
+        langSelect.addEventListener("change", (e) => {
+          gtag("event", "language_change_detail", { value: e.target.value });
+        });
+      }
+    });
+  </script>
+
+  <script>
+    // 인덱스와 동일하게 도메인에 따라 API Base 자동 분기
+    (function () {
+      const host = window.location.hostname;
+      const isStg =
+        host.includes("kobot-pick-stg") ||
+        host.includes("stg.vercel.app") ||
+        host.includes("kobotpick-stg.onrender.com");
+      const base = isStg
+        ? "https://kobotpick-stg.onrender.com"
+        : "https://kobotpick.onrender.com";
+      window.KOBOT_API_BASE_URL = `${base}/api/v1`;
+    })();
+  </script>
+
+  <link rel="stylesheet" href="/css/styles.css" />
+  <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+</head>
+<body>
+  <div class="app-root detail-page">
+    <!-- Header -->
+    <header class="hero">
+      <div class="hero-left">
+        <div class="brand-mark">KP</div>
+        <div class="hero-titles">
+          <p class="eyebrow">AI STOCK DETAIL</p>
+          <div class="detail-header-main">
+            <div class="detail-header-left">
+              <div class="detail-names">
+                <div id="company-name">로딩 중...</div>
+                <div id="ticker-pill">-</div>
+              </div>
+            </div>
+            <div class="detail-header-right">
+              <select id="lang-select-detail" class="lang-select" aria-label="언어 선택">
+                <option value="ko">한국어 · KR</option>
+                <option value="en">English · US</option>
+              </select>
+              <button id="fav-toggle" type="button">☆ 관심 목록</button>
+            </div>
+          </div>
+          <p id="current-price">실시간 가격 데이터를 불러오는 중입니다...</p>
+        </div>
+      </div>
+    </header>
+
+    <!-- 광고 영역 (상단) -->
+    <div class="ad-placeholder subtle">
+      <div class="ad-chip">Ad</div>
+      <ins
+        class="adsbygoogle"
+        style="display:block"
+        data-ad-client="ca-pub-7730946066495644"
+        data-ad-slot="3927755182"
+        data-ad-format="auto"
+        data-full-width-responsive="true"
+      ></ins>
+      <script>
+        (adsbygoogle = window.adsbygoogle || []).push({});
+      </script>
+    </div>
+
+    <!-- 로딩 / 스켈레톤 -->
+    <div id="loading" class="loading" aria-live="polite"></div>
+
+    <div id="skeleton-detail">
+      <div class="detail-skeleton-row">
+        <div class="detail-skeleton-line long"></div>
+        <div class="detail-skeleton-line mid"></div>
+      </div>
+      <div class="detail-skeleton-row">
+        <div class="detail-skeleton-line long"></div>
+        <div class="detail-skeleton-line short"></div>
+        <div class="detail-skeleton-line mid"></div>
+      </div>
+    </div>
+
+    <!-- 실제 콘텐츠 -->
+    <div id="content" style="display:none;">
+      <!-- 상단: 차트 + 전략 -->
+      <section class="detail-main-grid">
+        <div class="card chart-card">
+          <div class="section-header">
+            <div class="section-title">
+              <span class="icon-badge">CH</span>
+              가격 차트
+            </div>
+            <div class="section-sub">최근 시세 흐름</div>
+          </div>
+          <div id="chart-area"></div>
+        </div>
+
+        <div class="card recommend-card">
+          <div class="section-header">
+            <div class="section-title">
+              <span class="icon-badge">AI</span>
+              AI 매매 전략
+            </div>
+            <div class="section-sub">당일 기준 권장 매매 전략</div>
+          </div>
+
+          <div class="recommend-grid">
+            <div class="recommend-stat buy">
+              <div class="recommend-label">매수가</div>
+              <div id="buy-price" class="recommend-value">-</div>
+            </div>
+            <div class="recommend-stat sell">
+              <div class="recommend-label">매도가</div>
+              <div id="sell-price" class="recommend-value">-</div>
+            </div>
+            <div class="recommend-stat stop">
+              <div class="recommend-label">손절가</div>
+              <div id="stop-loss" class="recommend-value">-</div>
+            </div>
+          </div>
+
+          <div id="action" class="recommend-action-pill hold">전략 분석 중...</div>
+          <p id="rationale-text">
+            AI가 종목의 밸류에이션 · 모멘텀 · 변동성을 종합하여 전략을 제안합니다.
+          </p>
+
+          <div class="section-header" style="margin-top:8px;">
+            <div class="section-title">
+              <span class="icon-badge">F</span>
+              기본 팩터
+            </div>
+            <div class="section-sub">밸류에이션 · 재무 · 수급 지표</div>
+          </div>
+          <div id="fundamentals-grid"></div>
+        </div>
+      </section>
+
+      <!-- 하단: 뉴스 / 기업정보 -->
+      <section class="detail-bottom-grid">
+        <div class="card">
+          <div class="section-header">
+            <div class="section-title">
+              <span class="icon-badge">N</span>
+              관련 뉴스
+            </div>
+            <div class="section-sub">종목 관련 주요 이슈</div>
+          </div>
+          <ul id="news-list" class="news-list"></ul>
+        </div>
+
+        <div class="card">
+          <div class="section-header">
+            <div class="section-title">
+              <span class="icon-badge">CO</span>
+              기업 정보
+            </div>
+            <div class="section-sub">섹터 · 산업 · 재무 개요</div>
+          </div>
+          <ul id="profile-list"></ul>
+        </div>
+      </section>
+
+      <!-- 광고 영역 -->
+      <div class="ad-placeholder subtle">
+        <div class="ad-chip">Ad</div>
+        <ins
+          class="adsbygoogle"
+          style="display:block"
+          data-ad-client="ca-pub-7730946066495644"
+          data-ad-slot="3927755182"
+          data-ad-format="auto"
+          data-full-width-responsive="true"
+        ></ins>
+        <script>
+          (adsbygoogle = window.adsbygoogle || []).push({});
+        </script>
+      </div>
+
+      <p class="disclaimer">
+        이 정보는 AI 알고리즘에 의한 참고용이며, 모든 투자 결정 및 책임은 사용자 본인에게 있습니다.
+      </p>
+
+      <div class="detail-footer-links">
+        <span>다른 종목도 살펴보시겠어요?</span>
+        <a href="/">Kobot Pick 대시보드로 이동</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="/js/chart_renderer.js"></script>
+  <script src="/js/stock_detail.js"></script>
+</body>
+</html>
