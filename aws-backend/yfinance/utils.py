@@ -21,24 +21,40 @@
 
 from __future__ import print_function
 
+import atexit as _atexit
+
 import datetime as _datetime
 import logging
-import re
+import os as _os
 import re as _re
+import sqlite3 as _sqlite3
 import sys as _sys
 import threading
-from functools import wraps
+from functools import lru_cache
 from inspect import getmembers
+from threading import Lock
 from types import FunctionType
-from typing import List, Optional
+from typing import Dict, Union, List, Optional
 
+import appdirs as _ad
 import numpy as _np
 import pandas as _pd
 import pytz as _tz
+import requests as _requests
 from dateutil.relativedelta import relativedelta
 from pytz import UnknownTimeZoneError
 
 from yfinance import const
+from .const import _BASE_URL_
+
+try:
+    import ujson as _json
+except ImportError:
+    import json as _json
+
+user_agent_headers = {
+    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/39.0.2171.95 Safari/537.36'}
+
 
 # From https://stackoverflow.com/a/59128615
 def attributes(obj):
@@ -48,6 +64,13 @@ def attributes(obj):
     return {
         name: getattr(obj, name) for name in dir(obj)
         if name[0] != '_' and name not in disallowed_names and hasattr(obj, name)}
+
+
+@lru_cache(maxsize=20)
+def print_once(msg):
+    # 'warnings' module suppression of repeat messages does not work. 
+    # This function replicates correct behaviour
+    print(msg)
 
 
 # Logging
@@ -83,7 +106,6 @@ def get_indented_logger(name=None):
 
 
 def log_indent_decorator(func):
-    @wraps(func)
     def wrapper(*args, **kwargs):
         logger = get_indented_logger('yfinance')
         logger.debug(f'Entering {func.__name__}()')
@@ -129,88 +151,79 @@ yf_logger = None
 yf_log_indented = False
 
 
-class YFLogFormatter(logging.Filter):
-    # Help be consistent with structuring YF log messages
-    def filter(self, record):
-        msg = record.msg
-        if hasattr(record, 'yf_cat'):
-            msg = f"{record.yf_cat}: {msg}"
-        if hasattr(record, 'yf_interval'):
-            msg = f"{record.yf_interval}: {msg}"
-        if hasattr(record, 'yf_symbol'):
-            msg = f"{record.yf_symbol}: {msg}"
-        record.msg = msg
-        return True
-
-
 def get_yf_logger():
     global yf_logger
+    if yf_logger is None:
+        yf_logger = logging.getLogger('yfinance')
     global yf_log_indented
     if yf_log_indented:
         yf_logger = get_indented_logger('yfinance')
-    elif yf_logger is None:
-        yf_logger = logging.getLogger('yfinance')
-        yf_logger.addFilter(YFLogFormatter())
     return yf_logger
 
 
-def enable_debug_mode():
+def setup_debug_formatting():
     global yf_logger
+    yf_logger = get_yf_logger()
+
+    if not yf_logger.isEnabledFor(logging.DEBUG):
+        yf_logger.warning("logging mode not set to 'DEBUG', so not setting up debug formatting")
+        return
+
+    if yf_logger.handlers is None or len(yf_logger.handlers) == 0:
+        h = logging.StreamHandler()
+        # Ensure different level strings don't interfere with indentation
+        formatter = MultiLineFormatter(fmt='%(levelname)-8s %(message)s')
+        h.setFormatter(formatter)
+        yf_logger.addHandler(h)
+
     global yf_log_indented
-    if not yf_log_indented:
-        yf_logger = logging.getLogger('yfinance')
-        yf_logger.setLevel(logging.DEBUG)
-        if yf_logger.handlers is None or len(yf_logger.handlers) == 0:
-            h = logging.StreamHandler()
-            # Ensure different level strings don't interfere with indentation
-            formatter = MultiLineFormatter(fmt='%(levelname)-8s %(message)s')
-            h.setFormatter(formatter)
-            yf_logger.addHandler(h)
-        yf_logger = get_indented_logger()
-        yf_log_indented = True
+    yf_log_indented = True
+
+
+def enable_debug_mode():
+    get_yf_logger().setLevel(logging.DEBUG)
+    setup_debug_formatting()
 
 
 def is_isin(string):
     return bool(_re.match("^([A-Z]{2})([A-Z0-9]{9})([0-9])$", string))
 
 
-def get_all_by_isin(isin):
+def get_all_by_isin(isin, proxy=None, session=None):
     if not (is_isin(isin)):
         raise ValueError("Invalid ISIN number")
-
-    # Deferred this to prevent circular imports
-    from .search import Search
-
-    search = Search(query=isin, max_results=1)
-
-    # Extract the first quote and news
-    ticker = search.quotes[0] if search.quotes else {}
-    news = search.news
-
-    return {
-        'ticker': {
-            'symbol': ticker.get('symbol', ''),
-            'shortname': ticker.get('shortname', ''),
-            'longname': ticker.get('longname', ''),
-            'type': ticker.get('quoteType', ''),
-            'exchange': ticker.get('exchDisp', ''),
-        },
-        'news': news
-    }
+    session = session or _requests
+    url = f"{_BASE_URL_}/v1/finance/search?q={isin}"
+    data = session.get(url=url, proxies=proxy, headers=user_agent_headers)
+    try:
+        data = data.json()
+        ticker = data.get('quotes', [{}])[0]
+        return {
+            'ticker': {
+                'symbol': ticker['symbol'],
+                'shortname': ticker['shortname'],
+                'longname': ticker['longname'],
+                'type': ticker['quoteType'],
+                'exchange': ticker['exchDisp'],
+            },
+            'news': data.get('news', [])
+        }
+    except Exception:
+        return {}
 
 
-def get_ticker_by_isin(isin):
-    data = get_all_by_isin(isin)
+def get_ticker_by_isin(isin, proxy=None, session=None):
+    data = get_all_by_isin(isin, proxy, session)
     return data.get('ticker', {}).get('symbol', '')
 
 
-def get_info_by_isin(isin):
-    data = get_all_by_isin(isin)
+def get_info_by_isin(isin, proxy=None, session=None):
+    data = get_all_by_isin(isin, proxy, session)
     return data.get('ticker', {})
 
 
-def get_news_by_isin(isin):
-    data = get_all_by_isin(isin)
+def get_news_by_isin(isin, proxy=None, session=None):
+    data = get_all_by_isin(isin, proxy, session)
     return data.get('news', {})
 
 
@@ -401,45 +414,32 @@ def snake_case_2_camelCase(s):
 
 def _parse_user_dt(dt, exchange_tz):
     if isinstance(dt, int):
-        dt = _pd.Timestamp(dt, unit="s", tz=exchange_tz)
+        # Should already be epoch, test with conversion:
+        _datetime.datetime.fromtimestamp(dt)
     else:
         # Convert str/date -> datetime, set tzinfo=exchange, get timestamp:
         if isinstance(dt, str):
             dt = _datetime.datetime.strptime(str(dt), '%Y-%m-%d')
         if isinstance(dt, _datetime.date) and not isinstance(dt, _datetime.datetime):
             dt = _datetime.datetime.combine(dt, _datetime.time(0))
-        if isinstance(dt, _datetime.datetime):
-            if dt.tzinfo is None:
-                # Assume user is referring to exchange's timezone
-                dt = _pd.Timestamp(dt).tz_localize(exchange_tz)
-            else:
-                dt = _pd.Timestamp(dt).tz_convert(exchange_tz)
-        else: # if we reached here, then it hasn't been any known type
-            raise ValueError(f"Unable to parse input dt {dt} of type {type(dt)}")
+        if isinstance(dt, _datetime.datetime) and dt.tzinfo is None:
+            # Assume user is referring to exchange's timezone
+            dt = _tz.timezone(exchange_tz).localize(dt)
+        dt = int(dt.timestamp())
     return dt
 
 
 def _interval_to_timedelta(interval):
-    if interval[-1] == "d":
-        return relativedelta(days=int(interval[:-1]))
-    elif interval[-2:] == "wk":
-        return relativedelta(weeks=int(interval[:-2]))
-    elif interval[-2:] == "mo":
-        return relativedelta(months=int(interval[:-2]))
-    elif interval[-1] == "y":
-        return relativedelta(years=int(interval[:-1]))
+    if interval == "1mo":
+        return relativedelta(months=1)
+    elif interval == "3mo":
+        return relativedelta(months=3)
+    elif interval == "1y":
+        return relativedelta(years=1)
+    elif interval == "1wk":
+        return _pd.Timedelta(days=7)
     else:
         return _pd.Timedelta(interval)
-
-
-def is_valid_period_format(period):
-    """Check if the provided period has a valid format."""
-    if period is None:
-        return False
-
-    # Regex pattern to match valid period formats like '1d', '2wk', '3mo', '1y'
-    valid_pattern = r"^[1-9]\d*(d|wk|mo|y)$"
-    return bool(re.match(valid_pattern, period))
 
 
 def auto_adjust(data):
@@ -516,18 +516,15 @@ def parse_actions(data):
     splits = None
 
     if "events" in data:
-        if "dividends" in data["events"] and len(data["events"]['dividends']) > 0:
+        if "dividends" in data["events"]:
             dividends = _pd.DataFrame(
                 data=list(data["events"]["dividends"].values()))
             dividends.set_index("date", inplace=True)
             dividends.index = _pd.to_datetime(dividends.index, unit="s")
             dividends.sort_index(inplace=True)
-            if 'currency' in dividends.columns and (dividends['currency'] == '').all():
-                # Currency column useless, drop it.
-                dividends = dividends.drop('currency', axis=1)
-            dividends = dividends.rename(columns={'amount': 'Dividends'})
+            dividends.columns = ["Dividends"]
 
-        if "capitalGains" in data["events"] and len(data["events"]['capitalGains']) > 0:
+        if "capitalGains" in data["events"]:
             capital_gains = _pd.DataFrame(
                 data=list(data["events"]["capitalGains"].values()))
             capital_gains.set_index("date", inplace=True)
@@ -535,7 +532,7 @@ def parse_actions(data):
             capital_gains.sort_index(inplace=True)
             capital_gains.columns = ["Capital Gains"]
 
-        if "splits" in data["events"] and len(data["events"]['splits']) > 0:
+        if "splits" in data["events"]:
             splits = _pd.DataFrame(
                 data=list(data["events"]["splits"].values()))
             splits.set_index("date", inplace=True)
@@ -592,40 +589,15 @@ def fix_Yahoo_returning_prepost_unrequested(quotes, interval, tradingPeriods):
     return quotes
 
 
-def _dts_in_same_interval(dt1, dt2, interval):
-    # Check if second date dt2 in interval starting at dt1
-
-    if interval == '1d':
-        last_rows_same_interval = dt1.date() == dt2.date()
-    elif interval == "1wk":
-        last_rows_same_interval = (dt2 - dt1).days < 7
-    elif interval == "1mo":
-        last_rows_same_interval = dt1.month == dt2.month
-    elif interval == "3mo":
-        shift = (dt1.month % 3) - 1
-        q1 = (dt1.month - shift - 1) // 3 + 1
-        q2 = (dt2.month - shift - 1) // 3 + 1
-        year_diff = dt2.year - dt1.year
-        quarter_diff = q2 - q1 + 4*year_diff
-        last_rows_same_interval = quarter_diff == 0
-    else:
-        last_rows_same_interval = (dt2 - dt1) < _pd.Timedelta(interval)
-    return last_rows_same_interval
-
-
-def fix_Yahoo_returning_live_separate(quotes, interval, tz_exchange, prepost, repair=False, currency=None):
-    # Yahoo bug fix. If market is open today then Yahoo normally returns
-    # todays data as a separate row from rest-of week/month interval in above row.
+def fix_Yahoo_returning_live_separate(quotes, interval, tz_exchange):
+    # Yahoo bug fix. If market is open today then Yahoo normally returns 
+    # todays data as a separate row from rest-of week/month interval in above row. 
     # Seems to depend on what exchange e.g. crypto OK.
     # Fix = merge them together
-
-    if interval[-1] not in ['m', 'h']:
-        prepost = False
-
-    dropped_row = None
-    if len(quotes) > 1:
-        dt1 = quotes.index[-1]
-        dt2 = quotes.index[-2]
+    n = quotes.shape[0]
+    if n > 1:
+        dt1 = quotes.index[n - 1]
+        dt2 = quotes.index[n - 2]
         if quotes.index.tz is None:
             dt1 = dt1.tz_localize("UTC")
             dt2 = dt2.tz_localize("UTC")
@@ -636,77 +608,52 @@ def fix_Yahoo_returning_live_separate(quotes, interval, tz_exchange, prepost, re
             # - exception is volume, *slightly* greater on final row (and matches website)
             if dt1.date() == dt2.date():
                 # Last two rows are on same day. Drop second-to-last row
-                dropped_row = quotes.iloc[-2]
-                quotes = _pd.concat([quotes.iloc[:-2], quotes.iloc[-1:]])
+                quotes = quotes.drop(quotes.index[n - 2])
         else:
-            if _dts_in_same_interval(dt2, dt1, interval):
+            if interval == "1wk":
+                last_rows_same_interval = dt1.year == dt2.year and dt1.week == dt2.week
+            elif interval == "1mo":
+                last_rows_same_interval = dt1.month == dt2.month
+            elif interval == "3mo":
+                last_rows_same_interval = dt1.year == dt2.year and dt1.quarter == dt2.quarter
+            else:
+                last_rows_same_interval = (dt1 - dt2) < _pd.Timedelta(interval)
+
+            if last_rows_same_interval:
                 # Last two rows are within same interval
-                idx1 = quotes.index[-1]
-                idx2 = quotes.index[-2]
+                idx1 = quotes.index[n - 1]
+                idx2 = quotes.index[n - 2]
                 if idx1 == idx2:
                     # Yahoo returning last interval duplicated, which means
                     # Yahoo is not returning live data (phew!)
-                    return quotes, None
-
-                if prepost:
-                    # Possibly dt1 is just start of post-market
-                    if dt1.second == 0:
-                        # assume post-market interval
-                        return quotes, None
-
-                ss = quotes['Stock Splits'].iloc[-2:].replace(0,1).prod()
-                if repair:
-                    # First, check if one row is ~100x the other. A £/pence mixup on LSE.
-                    # Avoid if a stock split near 100
-                    if currency == 'KWF':
-                        # Kuwaiti Dinar divided into 1000 not 100
-                        currency_divide = 1000
-                    else:
-                        currency_divide = 100
-                    # if ss < 75 or ss > 125:
-                    if abs(ss/currency_divide-1) > 0.25:
-                        ratio = quotes.loc[idx1, const._PRICE_COLNAMES_] / quotes.loc[idx2, const._PRICE_COLNAMES_]
-                        if ((ratio/currency_divide-1).abs() < 0.05).all():
-                            # newer prices are 100x
-                            for c in const._PRICE_COLNAMES_:
-                                quotes.loc[idx2, c] *= 100
-                        elif((ratio*currency_divide-1).abs() < 0.05).all():
-                            # newer prices are 0.01x
-                            for c in const._PRICE_COLNAMES_:
-                                quotes.loc[idx2, c] *= 0.01
-
+                    return quotes
                 if _np.isnan(quotes.loc[idx2, "Open"]):
-                    quotes.loc[idx2, "Open"] = quotes["Open"].iloc[-1]
+                    quotes.loc[idx2, "Open"] = quotes["Open"][n - 1]
                 # Note: nanmax() & nanmin() ignores NaNs, but still need to check not all are NaN to avoid warnings
-                if not _np.isnan(quotes["High"].iloc[-1]):
-                    quotes.loc[idx2, "High"] = _np.nanmax([quotes["High"].iloc[-1], quotes["High"].iloc[-2]])
+                if not _np.isnan(quotes["High"][n - 1]):
+                    quotes.loc[idx2, "High"] = _np.nanmax([quotes["High"][n - 1], quotes["High"][n - 2]])
                     if "Adj High" in quotes.columns:
-                        quotes.loc[idx2, "Adj High"] = _np.nanmax([quotes["Adj High"].iloc[-1], quotes["Adj High"].iloc[-2]])
+                        quotes.loc[idx2, "Adj High"] = _np.nanmax([quotes["Adj High"][n - 1], quotes["Adj High"][n - 2]])
 
-                if not _np.isnan(quotes["Low"].iloc[-1]):
-                    quotes.loc[idx2, "Low"] = _np.nanmin([quotes["Low"].iloc[-1], quotes["Low"].iloc[-2]])
+                if not _np.isnan(quotes["Low"][n - 1]):
+                    quotes.loc[idx2, "Low"] = _np.nanmin([quotes["Low"][n - 1], quotes["Low"][n - 2]])
                     if "Adj Low" in quotes.columns:
-                        quotes.loc[idx2, "Adj Low"] = _np.nanmin([quotes["Adj Low"].iloc[-1], quotes["Adj Low"].iloc[-2]])
+                        quotes.loc[idx2, "Adj Low"] = _np.nanmin([quotes["Adj Low"][n - 1], quotes["Adj Low"][n - 2]])
 
-                quotes.loc[idx2, "Close"] = quotes["Close"].iloc[-1]
+                quotes.loc[idx2, "Close"] = quotes["Close"][n - 1]
                 if "Adj Close" in quotes.columns:
-                    quotes.loc[idx2, "Adj Close"] = quotes["Adj Close"].iloc[-1]
-                quotes.loc[idx2, "Volume"] += quotes["Volume"].iloc[-1]
-                quotes.loc[idx2, "Dividends"] += quotes["Dividends"].iloc[-1]
-                if ss != 1.0:
-                    quotes.loc[idx2, "Stock Splits"] = ss
-                dropped_row = quotes.iloc[-1]
-                quotes = quotes.drop(quotes.index[-1])
+                    quotes.loc[idx2, "Adj Close"] = quotes["Adj Close"][n - 1]
+                quotes.loc[idx2, "Volume"] += quotes["Volume"][n - 1]
+                quotes = quotes.drop(quotes.index[n - 1])
 
-    return quotes, dropped_row
+    return quotes
 
 
 def safe_merge_dfs(df_main, df_sub, interval):
-    if df_sub.empty:
+    if df_sub.shape[0] == 0:
         raise Exception("No data to merge")
-    if df_main.empty:
-        return df_main
 
+    df_sub_backup = df_sub.copy()
     data_cols = [c for c in df_sub.columns if c not in df_main]
     if len(data_cols) > 1:
         raise Exception("Expected 1 data col")
@@ -728,14 +675,7 @@ def safe_merge_dfs(df_main, df_sub, interval):
     else:
         indices = _np.searchsorted(_np.append(df_main.index, df_main.index[-1] + td), df_sub.index, side='right')
         indices -= 1  # Convert from [[i-1], [i]) to [[i], [i+1])
-    # Numpy.searchsorted does not handle out-of-range well, so handle manually:
-    if intraday:
-        for i in range(len(df_sub.index)):
-            dt = df_sub.index[i].date()
-            if dt < df_main.index[0].date() or dt >= df_main.index[-1].date() + _datetime.timedelta(days=1):
-                # Out-of-range
-                indices[i] = -1
-    else:
+        # Numpy.searchsorted does not handle out-of-range well, so handle manually:
         for i in range(len(df_sub.index)):
             dt = df_sub.index[i]
             if dt < df_main.index[0] or dt >= df_main.index[-1] + td:
@@ -743,52 +683,39 @@ def safe_merge_dfs(df_main, df_sub, interval):
                 indices[i] = -1
 
     f_outOfRange = indices == -1
-    if f_outOfRange.any():
-        if intraday:
-            # Discard out-of-range dividends in intraday data, assume user not interested
-            df_sub = df_sub[~f_outOfRange]
-            if df_sub.empty:
-                df_main['Dividends'] = 0.0
-                return df_main
-
-            # df_sub changed so recalc indices:
-            df_main['_date'] = df_main.index.date
-            df_sub['_date'] = df_sub.index.date
-            indices = _np.searchsorted(_np.append(df_main['_date'], [df_main['_date'].iloc[-1]+td]), df_sub['_date'], side='left')
-            df_main = df_main.drop('_date', axis=1)
-            df_sub = df_sub.drop('_date', axis=1)
+    if f_outOfRange.any() and not intraday:
+        empty_row_data = {c:[_np.nan] for c in const.price_colnames}|{'Volume':[0]}
+        if interval == '1d':
+            # For 1d, add all out-of-range event dates
+            for i in _np.where(f_outOfRange)[0]:
+                dt = df_sub.index[i]
+                get_yf_logger().debug(f"Adding out-of-range {data_col} @ {dt.date()} in new prices row of NaNs")
+                empty_row = _pd.DataFrame(data=empty_row_data, index=[dt])
+                df_main = _pd.concat([df_main, empty_row], sort=True)
         else:
-            empty_row_data = {**{c:[_np.nan] for c in const._PRICE_COLNAMES_}, 'Volume':[0]}
-            if interval == '1d':
-                # For 1d, add all out-of-range event dates
-                for i in _np.where(f_outOfRange)[0]:
-                    dt = df_sub.index[i]
+            # Else, only add out-of-range event dates if occurring in interval 
+            # immediately after last pricfe row
+            last_dt = df_main.index[-1]
+            next_interval_start_dt = last_dt + td
+            next_interval_end_dt = next_interval_start_dt + td
+            for i in _np.where(f_outOfRange)[0]:
+                dt = df_sub.index[i]
+                if next_interval_start_dt <= dt < next_interval_end_dt:
+                    new_dt = next_interval_start_dt
                     get_yf_logger().debug(f"Adding out-of-range {data_col} @ {dt.date()} in new prices row of NaNs")
                     empty_row = _pd.DataFrame(data=empty_row_data, index=[dt])
                     df_main = _pd.concat([df_main, empty_row], sort=True)
-            else:
-                # Else, only add out-of-range event dates if occurring in interval
-                # immediately after last price row
-                last_dt = df_main.index[-1]
-                next_interval_start_dt = last_dt + td
-                next_interval_end_dt = next_interval_start_dt + td
-                for i in _np.where(f_outOfRange)[0]:
-                    dt = df_sub.index[i]
-                    if next_interval_start_dt <= dt < next_interval_end_dt:
-                        get_yf_logger().debug(f"Adding out-of-range {data_col} @ {dt.date()} in new prices row of NaNs")
-                        empty_row = _pd.DataFrame(data=empty_row_data, index=[dt])
-                        df_main = _pd.concat([df_main, empty_row], sort=True)
-            df_main = df_main.sort_index()
+        df_main = df_main.sort_index()
 
-            # Re-calculate indices
-            indices = _np.searchsorted(_np.append(df_main.index, df_main.index[-1] + td), df_sub.index, side='right')
-            indices -= 1  # Convert from [[i-1], [i]) to [[i], [i+1])
-            # Numpy.searchsorted does not handle out-of-range well, so handle manually:
-            for i in range(len(df_sub.index)):
-                dt = df_sub.index[i]
-                if dt < df_main.index[0] or dt >= df_main.index[-1] + td:
-                    # Out-of-range
-                    indices[i] = -1
+        # Re-calculate indices
+        indices = _np.searchsorted(_np.append(df_main.index, df_main.index[-1] + td), df_sub.index, side='right')
+        indices -= 1  # Convert from [[i-1], [i]) to [[i], [i+1])
+        # Numpy.searchsorted does not handle out-of-range well, so handle manually:
+        for i in range(len(df_sub.index)):
+            dt = df_sub.index[i]
+            if dt < df_main.index[0] or dt >= df_main.index[-1] + td:
+                # Out-of-range
+                indices[i] = -1
 
     f_outOfRange = indices == -1
     if f_outOfRange.any():
@@ -834,14 +761,14 @@ def safe_merge_dfs(df_main, df_sub, interval):
 
 def fix_Yahoo_dst_issue(df, interval):
     if interval in ["1d", "1w", "1wk"]:
-        # These intervals should start at time 00:00. But for some combinations of date and timezone,
+        # These intervals should start at time 00:00. But for some combinations of date and timezone, 
         # Yahoo has time off by few hours (e.g. Brazil 23:00 around Jan-2022). Suspect DST problem.
-        # The clue is (a) minutes=0 and (b) hour near 0.
+        # The clue is (a) minutes=0 and (b) hour near 0. 
         # Obviously Yahoo meant 00:00, so ensure this doesn't affect date conversion:
         f_pre_midnight = (df.index.minute == 0) & (df.index.hour.isin([22, 23]))
         dst_error_hours = _np.array([0] * df.shape[0])
         dst_error_hours[f_pre_midnight] = 24 - df.index[f_pre_midnight].hour
-        df.index += _pd.to_timedelta(dst_error_hours, 'h')
+        df.index += _pd.TimedeltaIndex(dst_error_hours, 'h')
     return df
 
 
@@ -927,9 +854,9 @@ class ProgressBar:
         if self.elapsed > self.iterations:
             self.elapsed = self.iterations
         self.update_iteration(1)
-        print('\r' + str(self), end='', file=_sys.stderr)
-        _sys.stderr.flush()
-        print("", file=_sys.stderr)
+        print('\r' + str(self), end='')
+        _sys.stdout.flush()
+        print()
 
     def animate(self, iteration=None):
         if iteration is None:
@@ -938,8 +865,8 @@ class ProgressBar:
         else:
             self.elapsed += iteration
 
-        print('\r' + str(self), end='', file=_sys.stderr)
-        _sys.stderr.flush()
+        print('\r' + str(self), end='')
+        _sys.stdout.flush()
         self.update_iteration()
 
     def update_iteration(self, val=None):
@@ -953,172 +880,197 @@ class ProgressBar:
         num_hashes = int(round((percent_done / 100.0) * all_full))
         self.prog_bar = '[' + self.fill_char * num_hashes + ' ' * (all_full - num_hashes) + ']'
         pct_place = (len(self.prog_bar) // 2) - len(str(percent_done))
-        pct_string = f'{percent_done}%'
+        pct_string = f'{percent_done}%%'
         self.prog_bar = self.prog_bar[0:pct_place] + (pct_string + self.prog_bar[pct_place + len(pct_string):])
 
     def __str__(self):
         return str(self.prog_bar)
 
-def dynamic_docstring(placeholders: dict):
-    """
-    A decorator to dynamically update the docstring of a function or method.
-    
-    Args:
-        placeholders (dict): A dictionary where keys are placeholder names and values are the strings to insert.
-    """
-    def decorator(func):
-        if func.__doc__:
-            docstring = func.__doc__
-            # Replace each placeholder with its corresponding value
-            for key, value in placeholders.items():
-                docstring = docstring.replace(f"{{{key}}}", value)
-            func.__doc__ = docstring
-        return func
-    return decorator
 
-def _generate_table_configurations(title = None) -> str:
-    import textwrap
-    if title is None:
-        title = "Permitted Keys/Values"
-    table = textwrap.dedent(f"""
-    .. list-table:: {title}
-       :widths: 25 75
-       :header-rows: 1
+# ---------------------------------
+# TimeZone cache related code
+# ---------------------------------
 
-       * - Key
-         - Values
-    """)
+class _KVStore:
+    """Simple Sqlite backed key/value store, key and value are strings. Should be thread safe."""
 
-    return table
+    def __init__(self, filename):
+        self._cache_mutex = Lock()
+        with self._cache_mutex:
+            self.conn = _sqlite3.connect(filename, timeout=10, check_same_thread=False)
+            self.conn.execute('pragma journal_mode=wal')
+            try:
+                self.conn.execute('create table if not exists "kv" (key TEXT primary key, value TEXT) without rowid')
+            except Exception as e:
+                if 'near "without": syntax error' in str(e):
+                    # "without rowid" requires sqlite 3.8.2. Older versions will raise exception
+                    self.conn.execute('create table if not exists "kv" (key TEXT primary key, value TEXT)')
+                else:
+                    raise
+            self.conn.commit()
+        _atexit.register(self.close)
 
-def generate_list_table_from_dict(data: dict, bullets: bool=True, title: str=None) -> str:
-    """
-    Generate a list-table for the docstring showing permitted keys/values.
-    """
-    table = _generate_table_configurations(title)
-    for k in sorted(data.keys()):
-        values = data[k]
-        table += ' '*3 + f"* - {k}\n"
-        lengths = [len(str(v)) for v in values]
-        if bullets and max(lengths) > 5:
-            table += ' '*5 + "-\n"
-            for value in sorted(values):
-                table += ' '*7 + f"- {value}\n"
+    def close(self):
+        if self.conn is not None:
+            with self._cache_mutex:
+                self.conn.close()
+                self.conn = None
+
+    def get(self, key: str) -> Union[str, None]:
+        """Get value for key if it exists else returns None"""
+        try:
+            item = self.conn.execute('select value from "kv" where key=?', (key,))
+        except _sqlite3.IntegrityError as e:
+            self.delete(key)
+            return None
+        if item:
+            return next(item, (None,))[0]
+
+    def set(self, key: str, value: str) -> None:
+        if value is None:
+            self.delete(key)
         else:
-            value_str = ', '.join(sorted(values))
-            table += ' '*5 + f"- {value_str}\n"
-    return table
+            with self._cache_mutex:
+                self.conn.execute('replace into "kv" (key, value) values (?,?)', (key, value))
+                self.conn.commit()
 
-# def generate_list_table_from_dict_of_dict(data: dict, bullets: bool=True, title: str=None) -> str:
-#     """
-#     Generate a list-table for the docstring showing permitted keys/values.
-#     """
-#     table = _generate_table_configurations(title)
-#     for k in sorted(data.keys()):
-#         values = data[k]
-#         table += ' '*3 + f"* - {k}\n"
-#         if bullets:
-#             table += ' '*5 + "-\n"
-#             for value in sorted(values):
-#                 table += ' '*7 + f"- {value}\n"
-#         else:
-#             table += ' '*5 + f"- {values}\n"
-#     return table
+    def bulk_set(self, kvdata: Dict[str, str]):
+        records = tuple(i for i in kvdata.items())
+        with self._cache_mutex:
+            self.conn.executemany('replace into "kv" (key, value) values (?,?)', records)
+            self.conn.commit()
+
+    def delete(self, key: str):
+        with self._cache_mutex:
+            self.conn.execute('delete from "kv" where key=?', (key,))
+            self.conn.commit()
 
 
-def generate_list_table_from_dict_universal(data: dict, bullets: bool=True, title: str=None, concat_keys=[]) -> str:
-    """
-    Generate a list-table for the docstring showing permitted keys/values.
-    """
-    table = _generate_table_configurations(title)
-    for k in data.keys():
-        values = data[k]
+class _TzCacheException(Exception):
+    pass
 
-        table += ' '*3 + f"* - {k}\n"
-        if isinstance(values, dict):
-            table_add = ''
 
-            concat_short_lines = k in concat_keys
+class _TzCache:
+    """Simple sqlite file cache of ticker->timezone"""
 
-            if bullets:
-                k_keys = sorted(list(values.keys()))
-                current_line = ''
-                block_format = 'query' in k_keys
-                for i in range(len(k_keys)):
-                    k2 = k_keys[i]
-                    k2_values = values[k2]
-                    k2_values_str = None
-                    if isinstance(k2_values, set):
-                        k2_values = list(k2_values)
-                    elif isinstance(k2_values, dict) and len(k2_values) == 0:
-                        k2_values = []
-                    if isinstance(k2_values, list):
-                        k2_values = sorted(k2_values)
-                        all_scalar = all(isinstance(k2v, (int, float, str)) for k2v in k2_values)
-                        if all_scalar:
-                            k2_values_str = _re.sub(r"[{}\[\]']", "", str(k2_values))
+    def __init__(self):
+        self._setup_cache_folder()
+        # Must init db here, where is thread-safe
+        try:
+            self._tz_db = _KVStore(_os.path.join(self._db_dir, "tkr-tz.db"))
+        except _sqlite3.DatabaseError as err:
+            raise _TzCacheException(f"Error creating TzCache folder: '{self._db_dir}' reason: {err}")
+        self._migrate_cache_tkr_tz()
 
-                    if k2_values_str is None:
-                        k2_values_str = str(k2_values)
+    def _setup_cache_folder(self):
+        if not _os.path.isdir(self._db_dir):
+            try:
+                _os.makedirs(self._db_dir)
+            except OSError as err:
+                raise _TzCacheException(f"Error creating TzCache folder: '{self._db_dir}' reason: {err}")
 
-                    if len(current_line) > 0 and (len(current_line) + len(k2_values_str) > 40):
-                        # new line
-                        table_add += current_line + '\n'
-                        current_line = ''
+        elif not (_os.access(self._db_dir, _os.R_OK) and _os.access(self._db_dir, _os.W_OK)):
+            raise _TzCacheException(f"Cannot read and write in TzCache folder: '{self._db_dir}'")
 
-                    if concat_short_lines:
-                        if current_line == '':
-                            current_line += ' '*5
-                            if i == 0:
-                                # Only add dash to first
-                                current_line += "- "
-                            else:
-                                current_line += "  "
-                            # Don't draw bullet points:
-                            current_line += '| '
-                        else:
-                            current_line += '.  '
-                        current_line += f"{k2}: " + k2_values_str
-                    else:
-                        table_add += ' '*5
-                        if i == 0:
-                            # Only add dash to first
-                            table_add += "- "
-                        else:
-                            table_add += "  "
+    def lookup(self, tkr):
+        return self.tz_db.get(tkr)
 
-                        if '\n' in k2_values_str:
-                            # Block format multiple lines
-                            table_add += '| ' + f"{k2}: " + "\n"
-                            k2_values_str_lines = k2_values_str.split('\n')
-                            for j in range(len(k2_values_str_lines)):
-                                line = k2_values_str_lines[j]
-                                table_add += ' '*7 + '|' + ' '*5 + line
-                                if j < len(k2_values_str_lines)-1:
-                                    table_add += "\n"
-                        else:
-                            if block_format:
-                                table_add += '| '
-                            else:
-                                table_add += '* '
-                            table_add += f"{k2}: " + k2_values_str
-
-                        table_add += "\n"
-                if current_line != '':
-                    table_add += current_line + '\n'
-            else:
-                table_add += ' '*5 + f"- {values}\n"
-
-            table += table_add
-
+    def store(self, tkr, tz):
+        if tz is None:
+            self.tz_db.delete(tkr)
         else:
-            lengths = [len(str(v)) for v in values]
-            if bullets and max(lengths) > 5:
-                table += ' '*5 + "-\n"
-                for value in sorted(values):
-                    table += ' '*7 + f"- {value}\n"
+            tz_db = self.tz_db.get(tkr)
+            if tz_db is not None:
+                if tz != tz_db:
+                    get_yf_logger().debug(f'{tkr}: Overwriting cached TZ "{tz_db}" with different TZ "{tz}"')
+                    self.tz_db.set(tkr, tz)
             else:
-                value_str = ', '.join(sorted(values))
-                table += ' '*5 + f"- {value_str}\n"
+                self.tz_db.set(tkr, tz)
 
-    return table
+    @property
+    def _db_dir(self):
+        global _cache_dir
+        return _os.path.join(_cache_dir, "py-yfinance")
+
+    @property
+    def tz_db(self):
+        return self._tz_db
+
+    def _migrate_cache_tkr_tz(self):
+        """Migrate contents from old ticker CSV-cache to SQLite db"""
+        old_cache_file_path = _os.path.join(self._db_dir, "tkr-tz.csv")
+
+        if not _os.path.isfile(old_cache_file_path):
+            return None
+        try:
+            df = _pd.read_csv(old_cache_file_path, index_col="Ticker", on_bad_lines="skip")
+        except _pd.errors.EmptyDataError:
+            _os.remove(old_cache_file_path)
+        except TypeError:
+            _os.remove(old_cache_file_path)
+        else:
+            # Discard corrupt data:
+            df = df[~df["Tz"].isna().to_numpy()]
+            df = df[~(df["Tz"] == '').to_numpy()]
+            df = df[~df.index.isna()]
+            if not df.empty:
+                try:
+                    self.tz_db.bulk_set(df.to_dict()['Tz'])
+                except Exception as e:
+                    # Ignore
+                    pass
+
+            _os.remove(old_cache_file_path)
+
+
+class _TzCacheDummy:
+    """Dummy cache to use if tz cache is disabled"""
+
+    def lookup(self, tkr):
+        return None
+
+    def store(self, tkr, tz):
+        pass
+
+    @property
+    def tz_db(self):
+        return None
+
+
+def get_tz_cache():
+    """
+    Get the timezone cache, initializes it and creates cache folder if needed on first call.
+    If folder cannot be created for some reason it will fall back to initialize a
+    dummy cache with same interface as real cash.
+    """
+    # as this can be called from multiple threads, protect it.
+    with _cache_init_lock:
+        global _tz_cache
+        if _tz_cache is None:
+            try:
+                _tz_cache = _TzCache()
+            except _TzCacheException as err:
+                get_yf_logger().info(f"Failed to create TzCache, reason: {err}. "
+                                     "TzCache will not be used. "
+                                     "Tip: You can direct cache to use a different location with 'set_tz_cache_location(mylocation)'")
+                _tz_cache = _TzCacheDummy()
+
+        return _tz_cache
+
+
+_cache_dir = _ad.user_cache_dir()
+_cache_init_lock = Lock()
+_tz_cache = None
+
+
+def set_tz_cache_location(cache_dir: str):
+    """
+    Sets the path to create the "py-yfinance" cache folder in.
+    Useful if the default folder returned by "appdir.user_cache_dir()" is not writable.
+    Must be called before cache is used (that is, before fetching tickers).
+    :param cache_dir: Path to use for caches
+    :return: None
+    """
+    global _cache_dir, _tz_cache
+    assert _tz_cache is None, "Time Zone cache already initialized, setting path must be done before cache is created"
+    _cache_dir = cache_dir

@@ -1,6 +1,14 @@
 import json
 import datetime
+import os
+import sys
 from typing import Any, Dict, Tuple
+
+# Ensure vendored dependencies under ./python are importable when deployed
+BASE_DIR = os.path.dirname(__file__)
+PYTHON_DIR = os.path.join(BASE_DIR, "python")
+if PYTHON_DIR not in sys.path:
+    sys.path.append(PYTHON_DIR)
 
 from core.kobot_engine import get_top_stocks, analyze_and_recommend
 from core.data_handler import get_market_snapshot, get_global_headlines

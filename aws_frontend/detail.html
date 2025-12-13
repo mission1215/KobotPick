@@ -43,14 +43,9 @@
   <script>
     // 인덱스와 동일하게 도메인에 따라 API Base 자동 분기
     (function () {
-      const host = window.location.hostname;
-      const isStg =
-        host.includes("kobot-pick-stg") ||
-        host.includes("stg.vercel.app") ||
-        host.includes("kobotpick-stg.onrender.com");
-      const base = isStg
-        ? "https://kobotpick-stg.onrender.com"
-        : "https://kobotpick.onrender.com";
+      const AWS_BASE = "https://ynbr2r4oujqkg2sh2la4wwy67e0fntkl.lambda-url.ap-northeast-2.on.aws";
+      // 필요 시 Render 등 다른 백엔드로 바꾸려면 위 BASE 값을 원하는 주소로 변경
+      const base = AWS_BASE.replace(/\/+$/, "");
       window.KOBOT_API_BASE_URL = `${base}/api/v1`;
     })();
   </script>

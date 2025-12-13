@@ -21,21 +21,16 @@
 
 from __future__ import print_function
 
+import datetime as _datetime
 from collections import namedtuple as _namedtuple
-import warnings
 
 import pandas as _pd
 
 from .base import TickerBase
-from .const import _BASE_URL_, _SENTINEL_
-from .scrapers.funds import FundsData
 
 
 class Ticker(TickerBase):
-    def __init__(self, ticker, session=None, proxy=_SENTINEL_):
-        if proxy is not _SENTINEL_:
-            warnings.warn("Set proxy via new config function: yf.set_config(proxy=proxy)", DeprecationWarning, stacklevel=2)
-            self._data._set_proxy(proxy)
+    def __init__(self, ticker, session=None):
         super(Ticker, self).__init__(ticker, session=session)
         self._expirations = {}
         self._underlying  = {}
@@ -43,16 +38,17 @@ class Ticker(TickerBase):
     def __repr__(self):
         return f'yfinance.Ticker object <{self.ticker}>'
 
-    def _download_options(self, date=None):
+    def _download_options(self, date=None, proxy=None):
         if date is None:
-            url = f"{_BASE_URL_}/v7/finance/options/{self.ticker}"
+            url = f"{self._base_url}/v7/finance/options/{self.ticker}"
         else:
-            url = f"{_BASE_URL_}/v7/finance/options/{self.ticker}?date={date}"
+            url = f"{self._base_url}/v7/finance/options/{self.ticker}?date={date}"
 
-        r = self._data.get(url=url).json()
+        r = self._data.get(url=url, proxy=proxy).json()
         if len(r.get('optionChain', {}).get('result', [])) > 0:
             for exp in r['optionChain']['result'][0]['expirationDates']:
-                self._expirations[_pd.Timestamp(exp, unit='s').strftime('%Y-%m-%d')] = exp
+                self._expirations[_datetime.datetime.utcfromtimestamp(
+                    exp).strftime('%Y-%m-%d')] = exp
 
             self._underlying = r['optionChain']['result'][0].get('quote', {})
 
@@ -84,9 +80,9 @@ class Ticker(TickerBase):
             data['lastTradeDate'] = data['lastTradeDate'].dt.tz_convert(tz)
         return data
 
-    def option_chain(self, date=None, tz=None):
+    def option_chain(self, date=None, proxy=None, tz=None):
         if date is None:
-            options = self._download_options()
+            options = self._download_options(proxy=proxy)
         else:
             if not self._expirations:
                 self._download_options()
@@ -95,12 +91,7 @@ class Ticker(TickerBase):
                     f"Expiration `{date}` cannot be found. "
                     f"Available expirations are: [{', '.join(self._expirations)}]")
             date = self._expirations[date]
-            options = self._download_options(date)
-
-        if not options:
-            return _namedtuple('Options', ['calls', 'puts', 'underlying'])(**{
-                "calls": None, "puts": None, "underlying": None
-            })
+            options = self._download_options(date, proxy=proxy)
 
         return _namedtuple('Options', ['calls', 'puts', 'underlying'])(**{
             "calls": self._options2df(options['calls'], tz=tz),
@@ -127,23 +118,11 @@ class Ticker(TickerBase):
         return self.get_mutualfund_holders()
 
     @property
-    def insider_purchases(self) -> _pd.DataFrame:
-        return self.get_insider_purchases()
-
-    @property
-    def insider_transactions(self) -> _pd.DataFrame:
-        return self.get_insider_transactions()
-
-    @property
-    def insider_roster_holders(self) -> _pd.DataFrame:
-        return self.get_insider_roster_holders()
-
-    @property
     def dividends(self) -> _pd.Series:
         return self.get_dividends()
 
     @property
-    def capital_gains(self) -> _pd.Series:
+    def capital_gains(self):
         return self.get_capital_gains()
 
     @property
@@ -155,7 +134,7 @@ class Ticker(TickerBase):
         return self.get_actions()
 
     @property
-    def shares(self) -> _pd.DataFrame:
+    def shares(self) -> _pd.DataFrame :
         return self.get_shares()
 
     @property
@@ -167,27 +146,12 @@ class Ticker(TickerBase):
         return self.get_fast_info()
 
     @property
-    def calendar(self) -> dict:
-        """
-        Returns a dictionary of events, earnings, and dividends for the ticker
-        """
+    def calendar(self) -> _pd.DataFrame:
         return self.get_calendar()
-
-    @property
-    def sec_filings(self) -> dict:
-        return self.get_sec_filings()
 
     @property
     def recommendations(self):
         return self.get_recommendations()
-
-    @property
-    def recommendations_summary(self):
-        return self.get_recommendations_summary()
-
-    @property
-    def upgrades_downgrades(self):
-        return self.get_upgrades_downgrades()
 
     @property
     def earnings(self) -> _pd.DataFrame:
@@ -206,10 +170,6 @@ class Ticker(TickerBase):
         return self.get_income_stmt(pretty=True, freq='quarterly')
 
     @property
-    def ttm_income_stmt(self) -> _pd.DataFrame:
-        return self.get_income_stmt(pretty=True, freq='trailing')
-
-    @property
     def incomestmt(self) -> _pd.DataFrame:
         return self.income_stmt
 
@@ -218,20 +178,12 @@ class Ticker(TickerBase):
         return self.quarterly_income_stmt
 
     @property
-    def ttm_incomestmt(self) -> _pd.DataFrame:
-        return self.ttm_income_stmt
-
-    @property
     def financials(self) -> _pd.DataFrame:
         return self.income_stmt
 
     @property
     def quarterly_financials(self) -> _pd.DataFrame:
         return self.quarterly_income_stmt
-
-    @property
-    def ttm_financials(self) -> _pd.DataFrame:
-        return self.ttm_income_stmt
 
     @property
     def balance_sheet(self) -> _pd.DataFrame:
@@ -258,10 +210,6 @@ class Ticker(TickerBase):
         return self.get_cash_flow(pretty=True, freq='quarterly')
 
     @property
-    def ttm_cash_flow(self) -> _pd.DataFrame:
-        return self.get_cash_flow(pretty=True, freq='trailing')
-
-    @property
     def cashflow(self) -> _pd.DataFrame:
         return self.cash_flow
 
@@ -270,36 +218,16 @@ class Ticker(TickerBase):
         return self.quarterly_cash_flow
 
     @property
-    def ttm_cashflow(self) -> _pd.DataFrame:
-        return self.ttm_cash_flow
+    def recommendations_summary(self):
+        return self.get_recommendations_summary()
 
     @property
-    def analyst_price_targets(self) -> dict:
-        return self.get_analyst_price_targets()
+    def analyst_price_target(self) -> _pd.DataFrame:
+        return self.get_analyst_price_target()
 
     @property
-    def earnings_estimate(self) -> _pd.DataFrame:
-        return self.get_earnings_estimate()
-
-    @property
-    def revenue_estimate(self) -> _pd.DataFrame:
-        return self.get_revenue_estimate()
-
-    @property
-    def earnings_history(self) -> _pd.DataFrame:
-        return self.get_earnings_history()
-
-    @property
-    def eps_trend(self) -> _pd.DataFrame:
-        return self.get_eps_trend()
-
-    @property
-    def eps_revisions(self) -> _pd.DataFrame:
-        return self.get_eps_revisions()
-
-    @property
-    def growth_estimates(self) -> _pd.DataFrame:
-        return self.get_growth_estimates()
+    def revenue_forecasts(self) -> _pd.DataFrame:
+        return self.get_rev_forecast()
 
     @property
     def sustainability(self) -> _pd.DataFrame:
@@ -312,17 +240,25 @@ class Ticker(TickerBase):
         return tuple(self._expirations.keys())
 
     @property
-    def news(self) -> list:
+    def news(self):
         return self.get_news()
+
+    @property
+    def trend_details(self) -> _pd.DataFrame:
+        return self.get_trend_details()
+
+    @property
+    def earnings_trend(self) -> _pd.DataFrame:
+        return self.get_earnings_trend()
 
     @property
     def earnings_dates(self) -> _pd.DataFrame:
         return self.get_earnings_dates()
 
     @property
-    def history_metadata(self) -> dict:
-        return self.get_history_metadata()
+    def earnings_forecasts(self) -> _pd.DataFrame:
+        return self.get_earnings_forecast()
 
     @property
-    def funds_data(self) -> FundsData:
-        return self.get_funds_data()
+    def history_metadata(self) -> dict:
+        return self.get_history_metadata()

@@ -24,32 +24,25 @@ from __future__ import print_function
 import logging
 import time as _time
 import traceback
-from typing import Union
-import warnings
 
 import multitasking as _multitasking
 import pandas as _pd
-from curl_cffi import requests
 
 from . import Ticker, utils
-from .data import YfData
 from . import shared
-from .const import _SENTINEL_
+
 
 @utils.log_indent_decorator
-def download(tickers, start=None, end=None, actions=False, threads=True,
-             ignore_tz=None, group_by='column', auto_adjust=None, back_adjust=False,
-             repair=False, keepna=False, progress=True, period=None, interval="1d",
-             prepost=False, proxy=_SENTINEL_, rounding=False, timeout=10, session=None,
-             multi_level_index=True) -> Union[_pd.DataFrame, None]:
-    """
-    Download yahoo tickers
+def download(tickers, start=None, end=None, actions=False, threads=True, ignore_tz=None,
+             group_by='column', auto_adjust=False, back_adjust=False, repair=False, keepna=False,
+             progress=True, period="max", show_errors=None, interval="1d", prepost=False,
+             proxy=None, rounding=False, timeout=10, session=None):
+    """Download yahoo tickers
     :Parameters:
         tickers : str, list
             List of tickers to download
         period : str
             Valid periods: 1d,5d,1mo,3mo,6mo,1y,2y,5y,10y,ytd,max
-            Default: 1mo
             Either Use period parameter or use start and end
         interval : str
             Valid intervals: 1m,2m,5m,15m,30m,60m,90m,1h,1d,5d,1wk,1mo,3mo
@@ -68,7 +61,7 @@ def download(tickers, start=None, end=None, actions=False, threads=True,
             Include Pre and Post market data in results?
             Default is False
         auto_adjust: bool
-            Adjust all OHLC automatically? Default is True
+            Adjust all OHLC automatically? Default is False
         repair: bool
             Detect currency unit 100x mixups and attempt repair
             Default is False
@@ -82,29 +75,28 @@ def download(tickers, start=None, end=None, actions=False, threads=True,
         ignore_tz: bool
             When combining from different timezones, ignore that part of datetime.
             Default depends on interval. Intraday = False. Day+ = True.
+        proxy: str
+            Optional. Proxy server URL scheme. Default is None
         rounding: bool
             Optional. Round values to 2 decimal places?
+        show_errors: bool
+            Optional. Doesn't print errors if False
+            DEPRECATED, will be removed in future version
         timeout: None or float
             If not None stops waiting for a response after given number of
             seconds. (Can also be a fraction of a second e.g. 0.01)
         session: None or Session
             Optional. Pass your own session object to be used for all requests
-        multi_level_index: bool
-            Optional. Always return a MultiIndex DataFrame? Default is True
     """
     logger = utils.get_yf_logger()
-    session = session or requests.Session(impersonate="chrome")
 
-    # Ensure data initialised with session.
-    if proxy is not _SENTINEL_:
-        warnings.warn("Set proxy via new config function: yf.set_config(proxy=proxy)", DeprecationWarning, stacklevel=3)
-        YfData(proxy=proxy)
-    YfData(session=session)
-
-    if auto_adjust is None:
-        # Warn users that default has changed to True
-        warnings.warn("YF.download() has changed argument auto_adjust default to True", FutureWarning, stacklevel=3)
-        auto_adjust = True
+    if show_errors is not None:
+        if show_errors:
+            utils.print_once(f"yfinance: download(show_errors={show_errors}) argument is deprecated and will be removed in future version. Do this instead: logging.getLogger('yfinance').setLevel(logging.ERROR)")
+            logger.setLevel(logging.ERROR)
+        else:
+            utils.print_once(f"yfinance: download(show_errors={show_errors}) argument is deprecated and will be removed in future version. Do this instead to suppress error messages: logging.getLogger('yfinance').setLevel(logging.CRITICAL)")
+            logger.setLevel(logging.CRITICAL)
 
     if logger.isEnabledFor(logging.DEBUG):
         if threads:
@@ -119,7 +111,7 @@ def download(tickers, start=None, end=None, actions=False, threads=True,
 
     if ignore_tz is None:
         # Set default value depending on interval
-        if interval[-1] in ['m', 'h']:
+        if interval[1:] in ['m', 'h']:
             # Intraday
             ignore_tz = False
         else:
@@ -135,7 +127,7 @@ def download(tickers, start=None, end=None, actions=False, threads=True,
     for ticker in tickers:
         if utils.is_isin(ticker):
             isin = ticker
-            ticker = utils.get_ticker_by_isin(ticker)
+            ticker = utils.get_ticker_by_isin(ticker, proxy, session=session)
             shared._ISINS[ticker] = isin
         _tickers_.append(ticker)
 
@@ -161,8 +153,8 @@ def download(tickers, start=None, end=None, actions=False, threads=True,
                                    start=start, end=end, prepost=prepost,
                                    actions=actions, auto_adjust=auto_adjust,
                                    back_adjust=back_adjust, repair=repair, keepna=keepna,
-                                   progress=(progress and i > 0),
-                                   rounding=rounding, timeout=timeout)
+                                   progress=(progress and i > 0), proxy=proxy,
+                                   rounding=rounding, timeout=timeout, session=session)
         while len(shared._DFS) < len(tickers):
             _time.sleep(0.01)
     # download synchronously
@@ -172,10 +164,11 @@ def download(tickers, start=None, end=None, actions=False, threads=True,
                                  start=start, end=end, prepost=prepost,
                                  actions=actions, auto_adjust=auto_adjust,
                                  back_adjust=back_adjust, repair=repair, keepna=keepna,
-                                 rounding=rounding, timeout=timeout)
+                                 proxy=proxy,
+                                 rounding=rounding, timeout=timeout, session=session)
             if progress:
                 shared._PROGRESS_BAR.animate()
-
+    
     if progress:
         shared._PROGRESS_BAR.completed()
 
@@ -189,7 +182,7 @@ def download(tickers, start=None, end=None, actions=False, threads=True,
         errors = {}
         for ticker in shared._ERRORS:
             err = shared._ERRORS[ticker]
-            err = err.replace(f'${ticker}: ', '')
+            err = err.replace(f'{ticker}', '%ticker%')
             if err not in errors:
                 errors[err] = [ticker]
             else:
@@ -201,7 +194,7 @@ def download(tickers, start=None, end=None, actions=False, threads=True,
         tbs = {}
         for ticker in shared._TRACEBACKS:
             tb = shared._TRACEBACKS[ticker]
-            tb = tb.replace(f'${ticker}: ', '')
+            tb = tb.replace(f'{ticker}', '%ticker%')
             if tb not in tbs:
                 tbs[tb] = [ticker]
             else:
@@ -214,23 +207,24 @@ def download(tickers, start=None, end=None, actions=False, threads=True,
             if (shared._DFS[tkr] is not None) and (shared._DFS[tkr].shape[0] > 0):
                 shared._DFS[tkr].index = shared._DFS[tkr].index.tz_localize(None)
 
+    if len(tickers) == 1:
+        ticker = tickers[0]
+        return shared._DFS[ticker]
+
     try:
         data = _pd.concat(shared._DFS.values(), axis=1, sort=True,
-                          keys=shared._DFS.keys(), names=['Ticker', 'Price'])
+                          keys=shared._DFS.keys())
     except Exception:
         _realign_dfs()
         data = _pd.concat(shared._DFS.values(), axis=1, sort=True,
-                          keys=shared._DFS.keys(), names=['Ticker', 'Price'])
-    data.index = _pd.to_datetime(data.index, utc=not ignore_tz)
+                          keys=shared._DFS.keys())
+
     # switch names back to isins if applicable
     data.rename(columns=shared._ISINS, inplace=True)
 
     if group_by == 'column':
         data.columns = data.columns.swaplevel(0, 1)
         data.sort_index(level=0, axis=1, inplace=True)
-
-    if not multi_level_index and len(tickers) == 1:
-        data = data.droplevel(0 if group_by == 'ticker' else 1, axis=1).rename_axis(None, axis=1)
 
     return data
 
@@ -262,11 +256,11 @@ def _realign_dfs():
 def _download_one_threaded(ticker, start=None, end=None,
                            auto_adjust=False, back_adjust=False, repair=False,
                            actions=False, progress=True, period="max",
-                           interval="1d", prepost=False,
-                           keepna=False, rounding=False, timeout=10):
-    _download_one(ticker, start, end, auto_adjust, back_adjust, repair,
-                         actions, period, interval, prepost, rounding,
-                         keepna, timeout)
+                           interval="1d", prepost=False, proxy=None,
+                           keepna=False, rounding=False, timeout=10, session=None):
+    data = _download_one(ticker, start, end, auto_adjust, back_adjust, repair,
+                         actions, period, interval, prepost, proxy, rounding,
+                         keepna, timeout, session)
     if progress:
         shared._PROGRESS_BAR.animate()
 
@@ -274,15 +268,15 @@ def _download_one_threaded(ticker, start=None, end=None,
 def _download_one(ticker, start=None, end=None,
                   auto_adjust=False, back_adjust=False, repair=False,
                   actions=False, period="max", interval="1d",
-                  prepost=False, rounding=False,
-                  keepna=False, timeout=10):
+                  prepost=False, proxy=None, rounding=False,
+                  keepna=False, timeout=10, session=None):
     data = None
     try:
-        data = Ticker(ticker).history(
+        data = Ticker(ticker, session=session).history(
                 period=period, interval=interval,
                 start=start, end=end, prepost=prepost,
                 actions=actions, auto_adjust=auto_adjust,
-                back_adjust=back_adjust, repair=repair,
+                back_adjust=back_adjust, repair=repair, proxy=proxy,
                 rounding=rounding, keepna=keepna, timeout=timeout,
                 raise_errors=True
         )

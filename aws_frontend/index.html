@@ -71,15 +71,10 @@
 
   <!-- 백엔드 깨우기 & API Base 설정 (중요) -->
   <script>
-    const host = window.location.hostname;
-    const isStg =
-      host.includes("kobot-pick-stg") ||
-      host.includes("stg.vercel.app") ||
-      host.includes("kobotpick-stg.onrender.com");
-    // Render 서버 콜드스타트 방지 (stg/prod 모두)
-    const warmupBase = isStg
-      ? "https://kobotpick-stg.onrender.com"
-      : "https://kobotpick.onrender.com";
+    const AWS_BASE = "https://ynbr2r4oujqkg2sh2la4wwy67e0fntkl.lambda-url.ap-northeast-2.on.aws";
+    // 기본은 AWS Function URL 사용, 필요 시 아래 두 줄을 Render 주소로 바꿔 사용
+    // const AWS_BASE = "https://kobotpick.onrender.com";
+    const warmupBase = AWS_BASE.replace(/\/+$/, "");
     fetch(`${warmupBase}/warmup`).catch(() => {});
     fetch(`${warmupBase}/warmup`).catch(() => {});
     // JS에서 사용하는 공통 API Base
